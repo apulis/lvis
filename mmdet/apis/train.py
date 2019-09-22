@@ -175,6 +175,10 @@ def _dist_train(model, dataset, cfg, validate=False):
             if issubclass(dataset_type, datasets.CocoDataset):
                 runner.register_hook(
                     CocoDistEvalmAPHook(val_dataset_cfg, **eval_cfg))
+            elif issubclass(dataset_type, datasets.LVISDataset): 
+                pass
+                #runner.register_hook(
+                #    LVISDistEvalmAPHook(val_dataset_cfg, **eval_cfg))
             else:
                 runner.register_hook(
                     DistEvalmAPHook(val_dataset_cfg, **eval_cfg))

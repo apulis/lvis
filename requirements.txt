@@ -7,3 +7,7 @@ pycocotools
 torch>=1.1
 torchvision
 imagecorruptions
+cycler==0.10.0
+kiwisolver==1.1.0
+pyparsing==2.4.0
+python-dateutil==2.8.0
