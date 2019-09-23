@@ -3,6 +3,7 @@ from collections import defaultdict
 from .lvis import LVIS
 
 import pycocotools.mask as mask_utils
+from .logger import textLogger
 
 
 class LVISResults(LVIS):
@@ -60,6 +61,7 @@ class LVISResults(LVIS):
                 ann["id"] = id + 1
 
         self.dataset["annotations"] = result_anns
+        self.logger = textLogger()
         self._create_index()
 
         img_ids_in_result = [ann["image_id"] for ann in result_anns]

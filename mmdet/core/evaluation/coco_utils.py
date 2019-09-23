@@ -161,13 +161,17 @@ def segm2json(dataset, results):
 
 def results2json(dataset, results, out_file):
     result_files = dict()
-    if isinstance(results[0], list):
+    if isinstance(results[0], list): # [det] 
         json_results = det2json(dataset, results)
+        if len(json_results) == 0:
+            return None 
         result_files['bbox'] = '{}.{}.json'.format(out_file, 'bbox')
         result_files['proposal'] = '{}.{}.json'.format(out_file, 'bbox')
         mmcv.dump(json_results, result_files['bbox'])
-    elif isinstance(results[0], tuple):
+    elif isinstance(results[0], tuple): # ([det], [segm])
         json_results = segm2json(dataset, results)
+        if len(json_results[0]) == 0 or len(json_results[1]) == 0:
+            return None 
         result_files['bbox'] = '{}.{}.json'.format(out_file, 'bbox')
         result_files['proposal'] = '{}.{}.json'.format(out_file, 'bbox')
         result_files['segm'] = '{}.{}.json'.format(out_file, 'segm')

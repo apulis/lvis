@@ -146,12 +146,14 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/lvis_v0.5_train.json',
+        #ann_file=data_root + 'annotations/lvis_v0.5_train.json',
+        ann_file=data_root + 'annotations/lvis_train_subset.json',
         img_prefix=data_root + 'train2017/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/lvis_v0.5_val.json',
+        #ann_file=data_root + 'annotations/lvis_v0.5_val.json',
+        ann_file=data_root + 'annotations/lvis_val_subset.json',
         img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline),
     test=dict(
@@ -183,7 +185,7 @@ evaluation = dict(interval=1)
 total_epochs = 12
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/lvis/debug'
+work_dir = './work_dirs/lvis/de_debug'
 load_from = None
-resume_from = None
+resume_from = './work_dirs/lvis/debug/epoch_7.pth'
 workflow = [('train', 1)]

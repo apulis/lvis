@@ -12,6 +12,7 @@ from collections import defaultdict
 from urllib.request import urlretrieve
 
 import pycocotools.mask as mask_utils
+from .logger import textLogger
 
 
 class LVIS:
@@ -20,7 +21,9 @@ class LVIS:
         Args:
             annotation_path (str): location of annotation file
         """
-        print("Loading annotations.")
+        self.logger = textLogger() 
+        self.logger.log("Loading annotations: {}".format(
+            os.path.basename(annotation_path)))
 
         self.dataset = self._load_json(annotation_path)
 
@@ -34,7 +37,7 @@ class LVIS:
             return json.load(f)
 
     def _create_index(self):
-        print("Creating index.")
+        self.logger.log("Creating index.")
 
         self.img_ann_map = defaultdict(list)
         self.cat_img_map = defaultdict(list)
@@ -56,7 +59,7 @@ class LVIS:
         for ann in self.dataset["annotations"]:
             self.cat_img_map[ann["category_id"]].append(ann["image_id"])
 
-        print("Index created.")
+        self.logger.log("Index created.")
 
     def get_ann_ids(self, img_ids=None, cat_ids=None, area_rng=None):
         """Get ann ids that satisfy given filter conditions.

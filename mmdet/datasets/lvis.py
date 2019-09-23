@@ -23,7 +23,10 @@ class LVISDataset(CustomDataset):
         img_infos = []
         for i in self.img_ids:
             info = self.lvis.load_imgs([i])[0]
-            info['filename'] = info['file_name']
+            fname = info['file_name']
+            if fname.find('COCO_val2014_') > -1:
+                fname = fname.split('COCO_val2014_')[-1]
+            info['filename'] = fname
             img_infos.append(info)
         return img_infos
 

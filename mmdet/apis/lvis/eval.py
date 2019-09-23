@@ -10,7 +10,7 @@ from .results import LVISResults
 
 
 class LVISEval:
-    def __init__(self, lvis_gt, lvis_dt, iou_type="segm"):
+    def __init__(self, lvis_gt, lvis_dt, iou_type=None):
         """Constructor for LVISEval.
         Args:
             lvis_gt (LVIS class instance, or str containing path of annotation file)

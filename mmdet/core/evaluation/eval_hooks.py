@@ -11,6 +11,8 @@ from pycocotools.cocoeval import COCOeval
 from torch.utils.data import Dataset
 
 from mmdet import datasets
+from mmdet.apis.lvis import LVISEval
+
 from .coco_utils import fast_eval_recall, results2json
 from .mean_ap import eval_map
 
@@ -165,6 +167,43 @@ class CocoDistEvalmAPHook(DistEvalHook):
             runner.log_buffer.output['{}_mAP_copypaste'.format(res_type)] = (
                 '{ap[0]:.3f} {ap[1]:.3f} {ap[2]:.3f} {ap[3]:.3f} '
                 '{ap[4]:.3f} {ap[5]:.3f}').format(ap=cocoEval.stats[:6])
+        runner.log_buffer.ready = True
+        for res_type in res_types:
+            os.remove(result_files[res_type])
+
+
+class LVISDistEvalmAPHook(DistEvalHook):
+
+    def evaluate(self, runner, results):
+        tmp_file = osp.join(runner.work_dir, 'temp_0')
+        result_files = results2json(self.dataset, results, tmp_file)
+        if result_files is None:
+            print('Nothing to evaluate.')
+            return 
+
+        res_types = ['bbox', 'segm'
+                     ] if runner.model.module.with_mask else ['bbox']
+        for res_type in res_types:
+            try:
+                mmcv.check_file_exist(result_files[res_type])
+            except IndexError:
+                print('No prediction found.')
+                break
+            lvis_eval = LVISEval(
+                self.dataset.lvis, 
+                result_files[res_type], 
+                iou_type=res_type)
+            lvis_eval.run()
+            lvis_eval.print_results()
+
+            eval_results = lvis_eval.get_results()            
+            metrics = eval_results.keys()
+            for i, metric in enumerate(metrics):
+                if metric.find('AP') == -1: 
+                    continue
+                key = 'AP_{}/{}'.format(res_type, metric)
+                val = float('{:.3f}'.format(eval_results[metric]))
+                runner.log_buffer.output[key] = val
         runner.log_buffer.ready = True
         for res_type in res_types:
             os.remove(result_files[res_type])
