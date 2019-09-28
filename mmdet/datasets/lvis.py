@@ -20,6 +20,7 @@ class LVISDataset(CustomDataset):
             for i, cat_id in enumerate(self.cat_ids)
         }
         self.img_ids = self.lvis.get_img_ids()
+        self.categories = self._get_categories()
         img_infos = []
         for i in self.img_ids:
             info = self.lvis.load_imgs([i])[0]
@@ -35,6 +36,17 @@ class LVISDataset(CustomDataset):
         ann_ids = self.lvis.get_ann_ids(img_ids=[img_id])
         ann_info = self.lvis.load_anns(ids=ann_ids)
         return self._parse_ann_info(self.img_infos[idx], ann_info)
+
+    def _get_categories(self): 
+        cats = self.lvis.load_cats(self.cat_ids) 
+        
+        cat_infos = [] 
+        for i, cat in enumerate(cats): 
+            cat_info = cat.copy()
+            cat_info['category_freq'] = \
+                cat_info['image_count']/len(self.img_ids)
+            cat_infos.append(cat_info)  
+        return cat_infos
 
     def _filter_imgs(self, min_size=32):
         """Filter images too small or without ground truths."""

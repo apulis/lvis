@@ -9,7 +9,7 @@ from mmcv.runner import DistSamplerSeedHook, Runner, obj_from_dict
 from mmdet import datasets
 from mmdet.core import (CocoDistEvalmAPHook, CocoDistEvalRecallHook,
                         DistEvalmAPHook, DistOptimizerHook, Fp16OptimizerHook,
-                        LVISDistEvalmAPHook)
+                        LVISDistEvalmAPHook, RepeatFactorSamplingHook)
 from mmdet.datasets import DATASETS, build_dataloader
 from mmdet.models import RPN
 from .env import get_root_logger
@@ -138,9 +138,11 @@ def build_optimizer(model, optimizer_cfg):
 def _dist_train(model, dataset, cfg, validate=False):
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
+    repeated_sampling = cfg.curriculum_config.sampling is not None 
     data_loaders = [
         build_dataloader(
-            ds, cfg.data.imgs_per_gpu, cfg.data.workers_per_gpu, dist=True)
+            ds, cfg.data.imgs_per_gpu, cfg.data.workers_per_gpu, dist=True,
+            repeated_sampling=repeated_sampling)
         for ds in dataset
     ]
     # put model on gpus
@@ -150,7 +152,6 @@ def _dist_train(model, dataset, cfg, validate=False):
     optimizer = build_optimizer(model, cfg.optimizer)
     runner = Runner(model, batch_processor, optimizer, cfg.work_dir,
                     cfg.log_level)
-
     # fp16 setting
     fp16_cfg = cfg.get('fp16', None)
     if fp16_cfg is not None:
@@ -158,11 +159,21 @@ def _dist_train(model, dataset, cfg, validate=False):
                                              **fp16_cfg)
     else:
         optimizer_config = DistOptimizerHook(**cfg.optimizer_config)
-
+        
     # register hooks
     runner.register_training_hooks(cfg.lr_config, optimizer_config,
                                    cfg.checkpoint_config, cfg.log_config)
     runner.register_hook(DistSamplerSeedHook())
+
+    if cfg.curriculum_config is not None: 
+        if cfg.curriculum_config.sampling is not None: 
+            sampling_cfg = cfg.curriculum_config.sampling
+            runner.register_hook(
+                RepeatFactorSamplingHook(
+                    data_loaders[0], **sampling_cfg))
+        if cfg.curriculum_config.balance_loss is not None:
+            pass 
+
     # register eval hooks
     if validate:
         val_dataset_cfg = cfg.data.val

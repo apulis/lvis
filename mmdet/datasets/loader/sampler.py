@@ -34,6 +34,64 @@ class DistributedSampler(_DistributedSampler):
         return iter(indices)
 
 
+class DistributedWeightedRandomSampler(_DistributedSampler): 
+
+    def __init__(self, 
+                 dataset, 
+                 num_replicas=None, 
+                 rank=None, 
+                 shuffle=True,
+                 replacement=True):
+        super().__init__(dataset, num_replicas=num_replicas, rank=rank)
+        self.shuffle = shuffle 
+        self.repeat_factors = torch.as_tensor(
+            np.ones(len(dataset)).tolist(), dtype=torch.int)
+        self.replacement = replacement
+
+
+    def __iter__(self):
+        if self.shuffle: 
+            img_indices = self.get_img_repeat_indices(
+                self.dataset.img_infos, self.repeat_factors)
+            g = torch.Generator() 
+            g.manual_seed(self.epoch)
+            rand_indices = torch.randperm(
+                len(img_indices),
+                generator=g).tolist()[:len(self.dataset)]
+            indices = img_indices[rand_indices].tolist() 
+        else:
+            indices = torch.arange(len(self.dataset)).tolist()
+
+        # add extra samples to make it evenly divisible
+        indices += indices[:(self.total_size - len(indices))]
+        assert len(indices) == self.total_size
+
+        # subsample
+        indices = indices[self.rank:self.total_size:self.num_replicas]
+        assert len(indices) == self.num_samples
+
+        print('rank: {}, epoch: {}, len(img_indices): {}, len(indices): {}, len(set(indices)): {}'.format(
+            self.rank, self.epoch, len(img_indices), len(indices), len(set(indices))))
+
+        return iter(indices)
+
+
+    def set_repeat_factors(self, factors):
+        self.repeat_factors = np.asarray(
+            factors, dtype=np.int)
+
+
+    def get_img_repeat_indices(self, img_infos, repeat_factors):
+        assert len(img_infos) == len(repeat_factors)
+        indices = [] 
+        for i, (img_info, rep_factor) in enumerate(
+            zip(img_infos, repeat_factors)
+        ):
+            indices.extend(
+                np.repeat(i, rep_factor).tolist())
+        return np.asarray(indices, dtype=np.int)         
+
+
 class GroupSampler(Sampler):
 
     def __init__(self, dataset, samples_per_gpu=1):

@@ -19,7 +19,7 @@ from .mean_ap import eval_map
 
 class DistEvalHook(Hook):
 
-    def __init__(self, dataset, interval=1):
+    def __init__(self, dataset, interval=1, iou_type='segm'):
         if isinstance(dataset, Dataset):
             self.dataset = dataset
         elif isinstance(dataset, dict):
@@ -29,6 +29,9 @@ class DistEvalHook(Hook):
                 'dataset must be a Dataset object or a dict, not {}'.format(
                     type(dataset)))
         self.interval = interval
+        if isinstance(iou_type, str):
+            iou_type = [iou_type]
+        self.iou_type = iou_type
 
     def after_train_epoch(self, runner):
         if not self.every_n_epochs(runner, self.interval):
@@ -181,9 +184,13 @@ class LVISDistEvalmAPHook(DistEvalHook):
             print('Nothing to evaluate.')
             return 
 
-        res_types = ['bbox', 'segm'
-                     ] if runner.model.module.with_mask else ['bbox']
-        for res_type in res_types:
+        #res_types = ['bbox', 'segm'
+        #             ] if runner.model.module.with_mask else ['bbox']
+        for res_type in self.iou_type:
+            if res_type not in ['bbox', 'segm']: 
+                raise KeyError('invalid iou_type: {} for evaluation'.format(res_type))
+            if res_type == 'segm': 
+                assert runner.model.module.with_mask
             try:
                 mmcv.check_file_exist(result_files[res_type])
             except IndexError:

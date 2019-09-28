@@ -11,8 +11,10 @@ from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import get_dist_info, load_checkpoint
 
 from mmdet.apis import init_dist
-from mmdet.core import coco_eval, results2json, wrap_fp16_model
-from mmdet.datasets import build_dataloader, build_dataset
+from mmdet.core import (coco_eval, results2json, wrap_fp16_model, 
+                        lvis_eval)
+from mmdet import datasets
+from mmdet.datasets import DATASETS, build_dataloader, build_dataset
 from mmdet.models import build_detector
 
 
@@ -131,7 +133,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-
     assert args.out or args.show or args.json_out, \
         ('Please specify at least one operation (save or show the results) '
          'with the argument "--out" or "--show" or "--json_out"')
@@ -199,7 +200,19 @@ def main():
             else:
                 if not isinstance(outputs[0], dict):
                     result_files = results2json(dataset, outputs, args.out)
-                    coco_eval(result_files, eval_types, dataset.coco)
+                    dataset_type = DATASETS.get(cfg.data.test.type)
+                    if issubclass(dataset_type, datasets.CocoDataset):
+                        coco_eval(result_files, eval_types, dataset.coco)
+                    elif issubclass(dataset_type, datasets.LVISDataset):
+                        lvis_eval(
+                            result_files, 
+                            eval_types, 
+                            dataset.lvis,
+                            max_dets=300)
+                    else: 
+                        raise ValueError(
+                            '{} is not supported type for evaluation'.format(
+                                dataset_type))
                 else:
                     for name in outputs[0]:
                         print('\nEvaluating {}'.format(name))

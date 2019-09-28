@@ -70,7 +70,6 @@ def main():
     else:
         distributed = True
         init_dist(args.launcher, **cfg.dist_params)
-
     # init logger before other steps
     logger = get_root_logger(cfg.log_level)
     logger.info('Distributed training: {}'.format(distributed))

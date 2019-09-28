@@ -107,9 +107,9 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
-        score_thr=0.05,
+        score_thr=0.00,
         nms=dict(type='nms', iou_thr=0.5),
-        max_per_img=100,
+        max_per_img=300,
         mask_thr_binary=0.5))
 # dataset settings
 dataset_type = 'LVISDataset'
@@ -146,14 +146,12 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        #ann_file=data_root + 'annotations/lvis_v0.5_train.json',
-        ann_file=data_root + 'annotations/lvis_train_subset.json',
+        ann_file=data_root + 'annotations/lvis_v0.5_train.json',
         img_prefix=data_root + 'train2017/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
-        #ann_file=data_root + 'annotations/lvis_v0.5_val.json',
-        ann_file=data_root + 'annotations/lvis_val_subset.json',
+        ann_file=data_root + 'annotations/lvis_v0.5_val.json',
         img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline),
     test=dict(
@@ -161,31 +159,46 @@ data = dict(
         ann_file=data_root + 'annotations/lvis_v0.5_val.json',
         img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline))
+
+# curriculum scheduler 
+curriculum_config = dict(
+    sampling=dict(
+        interval=1,
+        schedule='constant',
+        reverse=True,
+        thres=0.001),
+    balance_loss = dict(
+        interval=1,
+        schedule='linear',
+        reverse=True))
+
 # optimizer
 optimizer = dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
+    by_epoch=False,
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=1000,
     warmup_ratio=1.0 / 3,
-    step=[8, 11])
-checkpoint_config = dict(interval=1)
+    # number of iterations
+    step=[60000, 80000])
+checkpoint_config = dict(interval=5)
 # yapf:disable
 log_config = dict(
-    interval=50,
+    interval=200,
     hooks=[
         dict(type='TextLoggerHook'),
         dict(type='TensorboardLoggerHook')
     ])
 # yapf:enable
-evaluation = dict(interval=1)
+evaluation = dict(interval=5, iou_type='segm')
 # runtime settings
-total_epochs = 12
+total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/lvis/de_debug'
+work_dir = './work_dirs/lvis/mask-rcnn_RS-1e-3'
 load_from = None
-resume_from = './work_dirs/lvis/debug/epoch_7.pth'
+resume_from = None
 workflow = [('train', 1)]
