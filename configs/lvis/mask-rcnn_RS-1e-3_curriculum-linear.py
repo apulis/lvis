@@ -107,9 +107,11 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
-        score_thr=0.00,
+        score_thr=0.05,
+        #score_thr=0.00,
         nms=dict(type='nms', iou_thr=0.5),
-        max_per_img=300,
+        max_per_img=100,
+        #max_per_img=300,
         mask_thr_binary=0.5))
 # dataset settings
 dataset_type = 'LVISDataset'
@@ -166,7 +168,7 @@ curriculum_config = dict(
         interval=1,
         schedule='linear',
         reverse=True,
-        thres=0.001),
+        thres=0.1),
     balance_loss = dict(
         interval=1,
         schedule='linear',
@@ -184,21 +186,21 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     # number of iterations
     step=[60000, 80000])
-checkpoint_config = dict(interval=5)
+checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
-    interval=200,
+    interval=100,
     hooks=[
         dict(type='TextLoggerHook'),
         dict(type='TensorboardLoggerHook')
     ])
 # yapf:enable
-evaluation = dict(interval=5, iou_type='segm')
+evaluation = dict(interval=1, iou_type='segm')
 # runtime settings
-total_epochs = 26
+total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/lvis/mask-rcnn_RS-1e-3_curriculum-linear'
+work_dir = './work_dirs/lvis/mask-rcnn_RS-1e-1_curriculum-linear'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

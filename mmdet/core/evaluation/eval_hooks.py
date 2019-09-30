@@ -212,5 +212,5 @@ class LVISDistEvalmAPHook(DistEvalHook):
                 val = float('{:.3f}'.format(eval_results[metric]))
                 runner.log_buffer.output[key] = val
         runner.log_buffer.ready = True
-        for res_type in res_types:
+        for res_type in self.iou_type:
             os.remove(result_files[res_type])

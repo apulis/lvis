@@ -1,10 +1,11 @@
 from .base_scheduler import BaseSchedulerHook
 from .sampling_hook import RepeatFactorSamplingHook
 from .loss_hook import MetricLossBalancerHook
-from .functions import linear, constant
+from .functions import linear, constant, convex, composite 
 
 
 __all__ = [
     'BaseSchedulerHook', 'RepeatFactorSamplingHook', 
-    'MetricLossBalancerHook', 'linear', 'constant'
+    'MetricLossBalancerHook', 'linear', 'constant', 
+    'convex', 'composite'
 ]

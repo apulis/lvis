@@ -34,20 +34,17 @@ class DistributedSampler(_DistributedSampler):
         return iter(indices)
 
 
-class DistributedWeightedRandomSampler(_DistributedSampler): 
+class DistributedRepeatedRandomSampler(_DistributedSampler): 
 
     def __init__(self, 
                  dataset, 
                  num_replicas=None, 
                  rank=None, 
-                 shuffle=True,
-                 replacement=True):
+                 shuffle=True):
         super().__init__(dataset, num_replicas=num_replicas, rank=rank)
         self.shuffle = shuffle 
         self.repeat_factors = torch.as_tensor(
             np.ones(len(dataset)).tolist(), dtype=torch.int)
-        self.replacement = replacement
-
 
     def __iter__(self):
         if self.shuffle: 
@@ -55,8 +52,7 @@ class DistributedWeightedRandomSampler(_DistributedSampler):
                 self.dataset.img_infos, self.repeat_factors)
             g = torch.Generator() 
             g.manual_seed(self.epoch)
-            rand_indices = torch.randperm(
-                len(img_indices),
+            rand_indices = torch.randperm(len(img_indices),
                 generator=g).tolist()[:len(self.dataset)]
             indices = img_indices[rand_indices].tolist() 
         else:
@@ -75,11 +71,9 @@ class DistributedWeightedRandomSampler(_DistributedSampler):
 
         return iter(indices)
 
-
     def set_repeat_factors(self, factors):
         self.repeat_factors = np.asarray(
             factors, dtype=np.int)
-
 
     def get_img_repeat_indices(self, img_infos, repeat_factors):
         assert len(img_infos) == len(repeat_factors)

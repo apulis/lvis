@@ -6,7 +6,7 @@ from mmcv.runner import get_dist_info
 from torch.utils.data import DataLoader
 
 from .sampler import (DistributedGroupSampler, DistributedSampler, GroupSampler, 
-                      DistributedWeightedRandomSampler)
+                      DistributedRepeatedRandomSampler)
 
 
 if platform.system() != 'Windows':
@@ -28,7 +28,7 @@ def build_dataloader(dataset,
         rank, world_size = get_dist_info()
         if shuffle:
             if repeated_sampling:
-                sampler = DistributedWeightedRandomSampler(
+                sampler = DistributedRepeatedRandomSampler(
                     dataset, 
                     num_replicas=world_size,
                     rank=rank)

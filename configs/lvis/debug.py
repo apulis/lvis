@@ -167,12 +167,12 @@ data = dict(
 curriculum_config = dict(
     sampling=dict(
         interval=1,
-        schedule='constant',
+        schedule=dict(type='constant', default_args=dict(value=1.0)),
         reverse=True,
         thres=0.001),
     balance_loss = dict(
         interval=1,
-        schedule='linear',
+        schedule=dict(type='linear'),
         reverse=True))
 
 # optimizer

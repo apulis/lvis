@@ -27,7 +27,6 @@ class RepeatFactorSamplingHook(BaseSchedulerHook):
 
     def _get_image_level_repeat_factor(self, categories, factor): 
         img_infos = self.dataset.img_infos 
-        #img_ids = self.dataset.img_ids
 
         repeat_factors = []
         for i in range(len(img_infos)): 

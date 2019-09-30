@@ -2,7 +2,7 @@ import torch
 import torch.distributed as dist
 from mmcv.runner import Hook
 
-from .functions import linear, constant
+from .functions import linear, constant, convex, composite, concave
 
 
 class BaseSchedulerHook(Hook):
