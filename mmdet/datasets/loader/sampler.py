@@ -85,7 +85,7 @@ class DistributedRepeatedRandomSampler(_DistributedSampler):
         ):
             indices.extend(
                 np.repeat(i, rep_factor).tolist())
-        return np.asarray(indices, dtype=np.int)         
+        return np.asarray(indices, dtype=np.int) 
 
 
 class GroupSampler(Sampler):
