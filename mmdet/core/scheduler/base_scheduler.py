@@ -1,8 +1,11 @@
+from functools import partial
+
 import torch
 import torch.distributed as dist
 from mmcv.runner import Hook
 
-from .functions import linear, constant, convex, composite, concave
+from .functions import (linear, constant, convex, 
+                        composite, concave, quadratic)
 
 
 class BaseSchedulerHook(Hook):
@@ -10,13 +13,16 @@ class BaseSchedulerHook(Hook):
     def __init__(self, 
                  interval,
                  schedule='linear',
-                 reverse=True):
+                 self_learning=None):
         self.interval = interval
-        if schedule not in ['linear', 'constant']: 
+        if schedule not in ['linear', 'constant', 'convex', 
+            'composite', 'concave', 'quadratic']: 
             raise KeyError('{} is not supported for curriculum function.')
         self.schedule = schedule 
-        self.reverse = reverse 
-        self.curriculum_func = eval(self.schedule)
+
+        curriculum_func = eval(self.schedule)
+        self.curriculum_func = partial(curriculum_func, **self_learning) \
+            if self_learning else curriculum_func
 
     def before_run(self, runner):
         pass 

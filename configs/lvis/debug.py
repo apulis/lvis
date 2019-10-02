@@ -107,7 +107,8 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
-        score_thr=0.00,
+        #score_thr=0.00,
+        score_thr=0.05,
         nms=dict(type='nms', iou_thr=0.5),
         max_per_img=300,
         mask_thr_binary=0.5))
@@ -146,8 +147,8 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/lvis_v0.5_train.json',
-        #ann_file=data_root + 'annotations/lvis_train_subset.json',
+        #ann_file=data_root + 'annotations/lvis_v0.5_train.json',
+        ann_file=data_root + 'annotations/lvis_train_subset.json',
         img_prefix=data_root + 'train2017/',
         pipeline=train_pipeline),
     val=dict(
@@ -167,13 +168,12 @@ data = dict(
 curriculum_config = dict(
     sampling=dict(
         interval=1,
-        schedule=dict(type='constant', default_args=dict(value=1.0)),
-        reverse=True,
-        thres=0.001),
+        schedule='quadratic',
+        self_learning=dict(phase=0.6, eps=0.001),
+        thres=0.1),
     balance_loss = dict(
         interval=1,
-        schedule=dict(type='linear'),
-        reverse=True))
+        schedule='linear'))
 
 # optimizer
 optimizer = dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
@@ -190,13 +190,13 @@ lr_config = dict(
 checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
-    interval=100,
+    interval=20,
     hooks=[
         dict(type='TextLoggerHook'),
         dict(type='TensorboardLoggerHook')
     ])
 # yapf:enable
-evaluation = dict(interval=5, iou_type='segm')
+evaluation = dict(interval=1, iou_type='segm')
 # runtime settings
 total_epochs = 26
 dist_params = dict(backend='nccl')

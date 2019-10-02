@@ -54,7 +54,8 @@ class DistributedRepeatedRandomSampler(_DistributedSampler):
             g.manual_seed(self.epoch)
             rand_indices = torch.randperm(len(img_indices),
                 generator=g).tolist()[:len(self.dataset)]
-            indices = img_indices[rand_indices].tolist() 
+            effective_indices = img_indices[rand_indices].tolist()
+            indices = effective_indices.copy()
         else:
             indices = torch.arange(len(self.dataset)).tolist()
 
@@ -66,14 +67,15 @@ class DistributedRepeatedRandomSampler(_DistributedSampler):
         indices = indices[self.rank:self.total_size:self.num_replicas]
         assert len(indices) == self.num_samples
 
-        print('rank: {}, epoch: {}, len(img_indices): {}, len(indices): {}, len(set(indices)): {}'.format(
-            self.rank, self.epoch, len(img_indices), len(indices), len(set(indices))))
+        if self.rank == 0:
+            img_indices[rand_indices].tolist()
+            print('epoch: {}, total copied: {}, len(dataset): {}, len(set(dataset)): {}\n'.format(
+                self.epoch, len(img_indices), len(self.dataset), len(set(effective_indices))))
 
         return iter(indices)
 
     def set_repeat_factors(self, factors):
-        self.repeat_factors = np.asarray(
-            factors, dtype=np.int)
+        self.repeat_factors = np.round(factors).astype(np.int)
 
     def get_img_repeat_indices(self, img_infos, repeat_factors):
         assert len(img_infos) == len(repeat_factors)

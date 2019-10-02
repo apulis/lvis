@@ -15,17 +15,17 @@ class RepeatFactorSamplingHook(BaseSchedulerHook):
         self.dataset = data_loader.dataset 
         self.thres = thres 
 
-    def _get_cat_level_repeat_factor(self): 
+    def _get_cat_level_repeat_factor(self, thres): 
         categories = self.dataset.categories
 
         for i, cat in enumerate(categories): 
             cat['category_level_repeat_factor'] = \
                 np.max(
-                    (1, np.sqrt(self.thres/cat['category_freq']))
+                    (1, np.sqrt(thres/cat['category_freq']))
                 )
         return categories
 
-    def _get_image_level_repeat_factor(self, categories, factor): 
+    def _get_image_level_repeat_factor(self, categories): 
         img_infos = self.dataset.img_infos 
 
         repeat_factors = []
@@ -49,19 +49,27 @@ class RepeatFactorSamplingHook(BaseSchedulerHook):
                     cat['category_level_repeat_factor'])
 
             img_level_repeat_factor = np.max(
-                cat_level_repeat_factor_in_img) ** factor
+                cat_level_repeat_factor_in_img)
             repeat_factors.append(img_level_repeat_factor)
 
         return repeat_factors
 
     def apply_curriculum(self, runner):
-        phase = runner.epoch/(runner.max_epochs-1)
-        if not self.reverse: 
-            phase = 1 - phase
-        curriculum_factor = self.curriculum_func(phase)
-        categories = self._get_cat_level_repeat_factor()
+        step = runner.epoch
+        total = runner.max_epochs-1
+        curriculum_factor = self.curriculum_func(step, total)
+        thres = self.thres*curriculum_factor
+        runner.logger.info(
+            'current phase: {}/{}={:.3f}\t'.format(
+                step, total, step/total) +
+            'curriculum factor set to {:.4f}, '.format(
+                curriculum_factor) +
+            'and repeat factor thres set to {:.4f}'.format(
+                thres))
+
+        categories = self._get_cat_level_repeat_factor(thres)
         repeat_factor = self._get_image_level_repeat_factor(
-            categories, curriculum_factor)
+            categories)
 
         sampler = self.data_loader.sampler 
         sampler.set_repeat_factors(repeat_factor)
