@@ -3,8 +3,6 @@ from .inference import (inference_detector, init_detector, show_result,
                         show_result_pyplot)
 from .train import train_detector
 
-from .lvis import *
-
 
 __all__ = [
     'init_dist', 'get_root_logger', 'set_random_seed', 'train_detector',

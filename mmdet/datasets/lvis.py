@@ -1,6 +1,6 @@
 import numpy as np
 
-from mmdet.apis.lvis import LVIS 
+from mmdet.lvis import LVIS 
 from mmdet.core.evaluation import get_classes
 
 from .custom import CustomDataset

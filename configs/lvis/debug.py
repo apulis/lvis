@@ -198,7 +198,7 @@ log_config = dict(
 # yapf:enable
 evaluation = dict(interval=1, iou_type='segm')
 # runtime settings
-total_epochs = 26
+total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/lvis/debug'
