@@ -11,7 +11,7 @@ from pycocotools.cocoeval import COCOeval
 from torch.utils.data import Dataset
 
 from mmdet import datasets
-from mmdet.apis.lvis import LVISEval
+from mmdet.lvis import LVISEval
 
 from .coco_utils import fast_eval_recall, results2json
 from .mean_ap import eval_map

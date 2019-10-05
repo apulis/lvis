@@ -1,7 +1,7 @@
 import mmcv
 import numpy as np
 
-from mmdet.apis.lvis import LVIS, LVISEval 
+from mmdet.lvis import LVIS, LVISEval 
 
 
 def lvis_eval(result_files, result_types, lvis, max_dets=100): 
