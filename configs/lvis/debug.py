@@ -169,7 +169,7 @@ curriculum_config = dict(
     sampling=dict(
         interval=1,
         schedule='quadratic',
-        self_learning=dict(phase=0.6, eps=0.001),
+        self_learning=dict(phase=0.6, eps=0.01),
         thres=0.1),
     balance_loss = dict(
         interval=1,
