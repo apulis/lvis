@@ -1,75 +1,61 @@
-import numpy as np 
-import torch
-import torch.distributed as dist
+import numpy as np
 
 from .base_scheduler import BaseSchedulerHook
 
 
-class RepeatFactorSamplingHook(BaseSchedulerHook): 
+class RepeatFactorSamplingHook(BaseSchedulerHook):
 
-    def __init__(self, data_loader, thres=0.001, **kwargs): 
+    def __init__(self, data_loader, thres=0.001, interpolate=False, **kwargs):
         super(RepeatFactorSamplingHook, self).__init__(**kwargs)
         assert data_loader.dataset.lvis is not None, \
             'RepeatFactorSamplingHook only supports for LVIS dataset.'
         self.data_loader = data_loader
-        self.dataset = data_loader.dataset 
-        self.thres = thres 
+        self.dataset = data_loader.dataset
+        self.thres = thres
+        self.interpolate = interpolate
+        self.img_repeat_factors = self.compute_img_repeat_factors()
 
-    def _get_cat_level_repeat_factor(self, thres): 
-        categories = self.dataset.categories
+    def compute_cat_repeat_factors(self):
+        dataset = self.dataset
+        cats = dataset.lvis.load_cats(dataset.cat_ids)
+        cat_freqs = np.zeros(len(cats))
+        for i, cat in enumerate(cats):
+            cat_freqs[i] = cat['image_count'] / len(dataset.img_ids)
+        cat_repeat_factors = np.maximum(1, np.sqrt(self.thres / cat_freqs))
+        return cat_repeat_factors
 
-        for i, cat in enumerate(categories): 
-            cat['category_level_repeat_factor'] = \
-                np.max(
-                    (1, np.sqrt(thres/cat['category_freq']))
-                )
-        return categories
+    def compute_img_repeat_factors(self):
+        cat_repeat_factors = self.compute_cat_repeat_factors()
+        img_repeat_factors = []
+        for i, img_info in enumerate(self.dataset.img_infos):
+            img_id = img_info['id']
+            ann_ids = self.dataset.lvis.get_ann_ids(img_ids=[img_id])
+            anns = self.dataset.lvis.load_anns(ids=ann_ids)
 
-    def _get_image_level_repeat_factor(self, categories): 
-        img_infos = self.dataset.img_infos 
+            cats_in_img = []
+            for ann in anns:
+                cats_in_img.append(ann['category_id'])
 
-        repeat_factors = []
-        for i in range(len(img_infos)): 
-            img_info = img_infos[i] 
-
-            ann_ids = self.dataset.lvis.get_ann_ids(
-                img_ids=[img_info['id']])
-            anns = self.dataset.lvis.load_anns(
-                ids=ann_ids)
-
-            categories_in_img = []
-            for ann in anns: 
-                cat_id = ann['category_id']
-                categories_in_img.append(cat_id)
-
-            cat_level_repeat_factor_in_img = []
-            for unique_cat_id in set(categories_in_img):
-                cat = categories[unique_cat_id-1]
-                cat_level_repeat_factor_in_img.append(
-                    cat['category_level_repeat_factor'])
-
-            img_level_repeat_factor = np.max(
-                cat_level_repeat_factor_in_img)
-            repeat_factors.append(img_level_repeat_factor)
-
-        return repeat_factors
+            cat_repeat_factors_in_img = []
+            for unique_cat_id in set(cats_in_img):
+                cat_repeat_factors_in_img.append(
+                    cat_repeat_factors[unique_cat_id - 1])
+            img_repeat_factors.append(np.max(cat_repeat_factors_in_img))
+        return np.asarray(img_repeat_factors)
 
     def apply_curriculum(self, runner):
-        step = runner.epoch
-        total = runner.max_epochs-1
-        curriculum_factor = self.curriculum_func(step, total)
-        thres = self.thres*curriculum_factor
-        runner.logger.info(
-            'current phase: {}/{}={:.3f}\t'.format(
-                step, total, step/total) +
-            'curriculum factor set to {:.4f}, '.format(
-                curriculum_factor) +
-            'and repeat factor thres set to {:.4f}'.format(
-                thres))
+        step = runner.epoch / (runner.max_epochs-1)
+        if self.interpolate:
+            # interpolate img repeat factors
+            # concave -> change slowly. convex -> change fast
+            repeat_factors = (1 - step) + step * self.img_repeat_factors
+            repeat_factors = np.round(repeat_factors).astype(np.int)
+        else:
+            repeat_factors = np.round(self.img_repeat_factors).astype(np.int)
 
-        categories = self._get_cat_level_repeat_factor(thres)
-        repeat_factor = self._get_image_level_repeat_factor(
-            categories)
+        repeated_img_indices = []
+        for idx, repeat_num in enumerate(repeat_factors):
+            repeated_img_indices.extend(np.repeat(idx, repeat_num).tolist())
 
-        sampler = self.data_loader.sampler 
-        sampler.set_repeat_factors(repeat_factor)
+        sampler = self.data_loader.sampler
+        sampler.set_repeated_indices(repeated_img_indices)

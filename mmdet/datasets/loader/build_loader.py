@@ -5,9 +5,8 @@ from mmcv.parallel import collate
 from mmcv.runner import get_dist_info
 from torch.utils.data import DataLoader
 
-from .sampler import (DistributedGroupSampler, DistributedSampler, GroupSampler, 
-                      DistributedRepeatedRandomSampler)
-
+from .sampler import (DistributedGroupSampler, DistributedSampler,
+                      GroupSampler, DistributedRepeatedRandomSampler)
 
 if platform.system() != 'Windows':
     # https://github.com/pytorch/pytorch/issues/973
@@ -29,9 +28,7 @@ def build_dataloader(dataset,
         if shuffle:
             if repeated_sampling:
                 sampler = DistributedRepeatedRandomSampler(
-                    dataset, 
-                    num_replicas=world_size,
-                    rank=rank)
+                    dataset, num_replicas=world_size, rank=rank)
             else:
                 sampler = DistributedGroupSampler(dataset, imgs_per_gpu,
                                                   world_size, rank)

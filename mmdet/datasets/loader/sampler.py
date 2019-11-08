@@ -34,26 +34,20 @@ class DistributedSampler(_DistributedSampler):
         return iter(indices)
 
 
-class DistributedRepeatedRandomSampler(_DistributedSampler): 
+class DistributedRepeatedRandomSampler(_DistributedSampler):
 
-    def __init__(self, 
-                 dataset, 
-                 num_replicas=None, 
-                 rank=None, 
-                 shuffle=True):
+    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True):
         super().__init__(dataset, num_replicas=num_replicas, rank=rank)
-        self.shuffle = shuffle 
-        self.repeat_factors = torch.as_tensor(
-            np.ones(len(dataset)).tolist(), dtype=torch.int)
+        self.shuffle = shuffle
+        self.repeated_img_indices = self.dataset.img_ids
 
     def __iter__(self):
-        if self.shuffle: 
-            img_indices = self.get_img_repeat_indices(
-                self.dataset.img_infos, self.repeat_factors)
-            g = torch.Generator() 
+        if self.shuffle:
+            img_indices = self.repeated_img_indices
+            g = torch.Generator()
             g.manual_seed(self.epoch)
-            rand_indices = torch.randperm(len(img_indices),
-                generator=g).tolist()[:len(self.dataset)]
+            rand_indices = torch.randperm(
+                len(img_indices), generator=g).tolist()[:len(self.dataset)]
             effective_indices = img_indices[rand_indices].tolist()
             indices = effective_indices.copy()
         else:
@@ -68,24 +62,13 @@ class DistributedRepeatedRandomSampler(_DistributedSampler):
         assert len(indices) == self.num_samples
 
         if self.rank == 0:
-            img_indices[rand_indices].tolist()
-            print('epoch: {}, total copied: {}, len(dataset): {}, len(set(dataset)): {}\n'.format(
-                self.epoch, len(img_indices), len(self.dataset), len(set(effective_indices))))
-
+            print(
+                'epoch: {}, total copied: {}, len(set(dataset)): {}\n'.format(
+                    self.epoch, len(img_indices), len(set(effective_indices))))
         return iter(indices)
 
-    def set_repeat_factors(self, factors):
-        self.repeat_factors = np.round(factors).astype(np.int)
-
-    def get_img_repeat_indices(self, img_infos, repeat_factors):
-        assert len(img_infos) == len(repeat_factors)
-        indices = [] 
-        for i, (img_info, rep_factor) in enumerate(
-            zip(img_infos, repeat_factors)
-        ):
-            indices.extend(
-                np.repeat(i, rep_factor).tolist())
-        return np.asarray(indices, dtype=np.int) 
+    def set_repeated_indices(self, repeated_indices):
+        self.repeated_img_indices = np.asarray(repeated_indices, dtype=np.int)
 
 
 class GroupSampler(Sampler):

@@ -10,10 +10,9 @@ import torch.distributed as dist
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import get_dist_info, load_checkpoint
 
-from mmdet.apis import init_dist
-from mmdet.core import (coco_eval, results2json, wrap_fp16_model, 
-                        lvis_eval)
 from mmdet import datasets
+from mmdet.apis import init_dist
+from mmdet.core import coco_eval, lvis_eval, results2json, wrap_fp16_model
 from mmdet.datasets import DATASETS, build_dataloader, build_dataset
 from mmdet.models import build_detector
 
@@ -205,11 +204,11 @@ def main():
                         coco_eval(result_files, eval_types, dataset.coco)
                     elif issubclass(dataset_type, datasets.LVISDataset):
                         lvis_eval(
-                            result_files, 
-                            eval_types, 
+                            result_files,
+                            eval_types,
                             dataset.lvis,
                             max_dets=300)
-                    else: 
+                    else:
                         raise ValueError(
                             '{} is not supported type for evaluation'.format(
                                 dataset_type))

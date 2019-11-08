@@ -147,21 +147,21 @@ data = dict(
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/lvis_v0.5_train.json',
-        #ann_file=data_root + 'annotations/lvis_train_subset.json',
         img_prefix=data_root + 'train2017/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/lvis_v0.5_val.json',
-        #ann_file=data_root + 'annotations/lvis_val_subset.json',
         img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/lvis_v0.5_val.json',
-        #ann_file=data_root + 'annotations/lvis_val_subset.json',
         img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline))
+
+sampling_scheduler_cfg = None
+
 # optimizer
 optimizer = dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))

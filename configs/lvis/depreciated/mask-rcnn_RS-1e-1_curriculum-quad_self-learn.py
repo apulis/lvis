@@ -162,14 +162,14 @@ data = dict(
         img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline))
 
-# curriculum scheduler 
+# curriculum scheduler
 curriculum_config = dict(
     sampling=dict(
         interval=1,
         schedule='quadratic',
         self_learning=dict(phase=0.6, eps=0.01),
         thres=0.1),
-    balance_loss = dict(
+    balance_loss=dict(
         interval=1,
         schedule='linear'))
 

@@ -138,12 +138,14 @@ def build_optimizer(model, optimizer_cfg):
 def _dist_train(model, dataset, cfg, validate=False):
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
-    repeated_sampling = cfg.curriculum_config.sampling is not None 
+    repeated_sampling = cfg.sampling_scheduler_cfg is not None
     data_loaders = [
         build_dataloader(
-            ds, cfg.data.imgs_per_gpu, cfg.data.workers_per_gpu, dist=True,
-            repeated_sampling=repeated_sampling)
-        for ds in dataset
+            ds,
+            cfg.data.imgs_per_gpu,
+            cfg.data.workers_per_gpu,
+            dist=True,
+            repeated_sampling=repeated_sampling) for ds in dataset
     ]
     # put model on gpus
     model = MMDistributedDataParallel(model.cuda())
@@ -159,20 +161,15 @@ def _dist_train(model, dataset, cfg, validate=False):
                                              **fp16_cfg)
     else:
         optimizer_config = DistOptimizerHook(**cfg.optimizer_config)
-        
+
     # register hooks
     runner.register_training_hooks(cfg.lr_config, optimizer_config,
                                    cfg.checkpoint_config, cfg.log_config)
     runner.register_hook(DistSamplerSeedHook())
-
-    if cfg.curriculum_config is not None: 
-        if cfg.curriculum_config.sampling is not None: 
-            sampling_cfg = cfg.curriculum_config.sampling
-            runner.register_hook(
-                RepeatFactorSamplingHook(
-                    data_loaders[0], **sampling_cfg))
-        if cfg.curriculum_config.balance_loss is not None:
-            pass 
+    if repeated_sampling:
+        runner.register_hook(
+            RepeatFactorSamplingHook(data_loaders[0],
+                                     **cfg.sampling_scheduler_cfg))
 
     # register eval hooks
     if validate:
@@ -187,7 +184,7 @@ def _dist_train(model, dataset, cfg, validate=False):
             if issubclass(dataset_type, datasets.CocoDataset):
                 runner.register_hook(
                     CocoDistEvalmAPHook(val_dataset_cfg, **eval_cfg))
-            elif issubclass(dataset_type, datasets.LVISDataset): 
+            elif issubclass(dataset_type, datasets.LVISDataset):
                 runner.register_hook(
                     LVISDistEvalmAPHook(val_dataset_cfg, **eval_cfg))
             else:
