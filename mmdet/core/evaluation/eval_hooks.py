@@ -12,7 +12,6 @@ from torch.utils.data import Dataset
 
 from mmdet import datasets
 from mmdet.lvis import LVISEval
-
 from .coco_utils import fast_eval_recall, results2json
 from .mean_ap import eval_map
 
@@ -182,14 +181,15 @@ class LVISDistEvalmAPHook(DistEvalHook):
         result_files = results2json(self.dataset, results, tmp_file)
         if result_files is None:
             print('Nothing to evaluate.')
-            return 
+            return
 
-        #res_types = ['bbox', 'segm'
+        # res_types = ['bbox', 'segm'
         #             ] if runner.model.module.with_mask else ['bbox']
         for res_type in self.iou_type:
-            if res_type not in ['bbox', 'segm']: 
-                raise KeyError('invalid iou_type: {} for evaluation'.format(res_type))
-            if res_type == 'segm': 
+            if res_type not in ['bbox', 'segm']:
+                raise KeyError(
+                    'invalid iou_type: {} for evaluation'.format(res_type))
+            if res_type == 'segm':
                 assert runner.model.module.with_mask
             try:
                 mmcv.check_file_exist(result_files[res_type])
@@ -197,16 +197,14 @@ class LVISDistEvalmAPHook(DistEvalHook):
                 print('No prediction found.')
                 break
             lvis_eval = LVISEval(
-                self.dataset.lvis, 
-                result_files[res_type], 
-                iou_type=res_type)
+                self.dataset.lvis, result_files[res_type], iou_type=res_type)
             lvis_eval.run()
             lvis_eval.print_results()
 
-            eval_results = lvis_eval.get_results()            
+            eval_results = lvis_eval.get_results()
             metrics = eval_results.keys()
             for i, metric in enumerate(metrics):
-                if metric.find('AP') == -1: 
+                if metric.find('AP') == -1:
                     continue
                 key = 'AP_{}/{}'.format(res_type, metric)
                 val = float('{:.3f}'.format(eval_results[metric]))

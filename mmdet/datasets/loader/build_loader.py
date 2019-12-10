@@ -5,8 +5,9 @@ from mmcv.parallel import collate
 from mmcv.runner import get_dist_info
 from torch.utils.data import DataLoader
 
-from .sampler import (DistributedGroupSampler, DistributedSampler,
-                      GroupSampler, DistributedRepeatedRandomSampler)
+from .sampler import (DistributedGroupSampler,
+                      DistributedRepeatedRandomSampler, DistributedSampler,
+                      GroupSampler)
 
 if platform.system() != 'Windows':
     # https://github.com/pytorch/pytorch/issues/973

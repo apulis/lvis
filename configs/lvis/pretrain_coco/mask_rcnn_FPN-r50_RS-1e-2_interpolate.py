@@ -166,7 +166,7 @@ data = dict(
 # sampling scheduler
 sampling_scheduler_cfg = dict(
         interval=1,
-        thres=0.001,
+        thres=0.01,
         interpolate=True)
 
 # optimizer
@@ -190,12 +190,13 @@ log_config = dict(
         dict(type='TensorboardLoggerHook')
     ])
 # yapf:enable
-evaluation = dict(interval=5, iou_type='segm')
+evaluation = dict(interval=1, iou_type='segm')
 # runtime settings
 total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/mask-rcnn-FPN-50_RS-1e-3_interpolate'
-load_from = None
+work_dir = './work_dirs/pretrin_coco/mask-rcnn_RS-1e-2_interpolate'
+# finetune on coco dataset
+load_from = 'weights/mask_rcnn_r50_fpn_1x_20181010-069fa190.pth'
 resume_from = None
 workflow = [('train', 1)]

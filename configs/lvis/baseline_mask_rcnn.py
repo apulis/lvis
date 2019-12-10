@@ -40,7 +40,7 @@ model = dict(
         num_classes=1+1230,
         target_means=[0., 0., 0., 0.],
         target_stds=[0.1, 0.1, 0.2, 0.2],
-        reg_class_agnostic=False,
+        reg_class_agnostic=True,
         loss_cls=dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)),
@@ -55,6 +55,7 @@ model = dict(
         in_channels=256,
         conv_out_channels=256,
         num_classes=1+1230,
+        class_agnostic=True,
         loss_mask=dict(
             type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)))
 # model training and testing settings
@@ -107,9 +108,9 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
-        score_thr=0.00,
+        score_thr=0.05,
         nms=dict(type='nms', iou_thr=0.5),
-        max_per_img=300,
+        max_per_img=100,
         mask_thr_binary=0.5))
 # dataset settings
 dataset_type = 'LVISDataset'
@@ -174,7 +175,7 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     # number of iterations
     step=[60000, 80000])
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=5)
 # yapf:disable
 log_config = dict(
     interval=100,
@@ -185,10 +186,10 @@ log_config = dict(
 # yapf:enable
 evaluation = dict(interval=5, iou_type='segm')
 # runtime settings
-total_epochs = 26
+total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/lvis/mask-rcnn_gpu-8_iter-90k'
+work_dir = './work_dirs/mask-rcnn_baseline'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

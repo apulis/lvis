@@ -1,6 +1,5 @@
 import datetime
-from collections import OrderedDict
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 
 import numpy as np
 import pycocotools.mask as mask_utils
@@ -295,7 +294,7 @@ class LVISEval:
 
         if not self.eval_imgs:
             print("Please run evaluate first.")
-            
+
         if self.params.use_cats:
             cat_ids = self.params.cat_ids
         else:

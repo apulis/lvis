@@ -1,8 +1,11 @@
+import os.path as osp
+
+import mmcv
 import numpy as np
+import pycocotools.mask as maskUtils
 
-from mmdet.lvis import LVIS
 from mmdet.core.evaluation import get_classes
-
+from mmdet.lvis import LVIS
 from .custom import CustomDataset
 from .registry import DATASETS
 
@@ -100,3 +103,40 @@ class LVISDataset(CustomDataset):
             seg_map=seg_map)
 
         return ann
+
+    def show_annotations(self, img_idx, show=False, out_file=None, **kwargs):
+        img_info = self.img_infos[img_idx]
+        img_id = img_info['id']
+        img_path = osp.join(self.img_prefix, img_info['file_name'])
+        img = mmcv.imread(img_path)
+        annotations = self.lvis.load_anns(
+            ids=self.lvis.get_ann_ids(img_ids=[img_id]))
+
+        bboxes = []
+        labels = []
+        class_names = ['bg'] + list(self.CLASSES)
+        for ann in annotations:
+            if len(ann['segmentation']) > 0:
+                rle = maskUtils.frPyObjects(ann['segmentation'],
+                                            img_info['height'],
+                                            img_info['width'])
+                ann_mask = np.sum(
+                    maskUtils.decode(rle), axis=2).astype(np.bool)
+                color_mask = np.random.randint(0, 256, (1, 3), dtype=np.uint8)
+                img[ann_mask] = img[ann_mask] * 0.5 + color_mask * 0.5
+            bbox = ann['bbox']
+            x, y, w, h = bbox
+            bboxes.append([x, y, x + w, y + h])
+            labels.append(ann['category_id'])
+        bboxes = np.stack(bboxes)
+        labels = np.stack(labels)
+        mmcv.imshow_det_bboxes(
+            img,
+            bboxes,
+            labels,
+            class_names=class_names,
+            show=show,
+            out_file=out_file,
+            **kwargs)
+        if not (show or out_file):
+            return img
