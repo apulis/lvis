@@ -6,6 +6,7 @@ from .faster_rcnn import FasterRCNN
 from .fcos import FCOS
 from .grid_rcnn import GridRCNN
 from .htc import HybridTaskCascade
+from .lvis_mask_rcnn import LVISMaskRCNN
 from .mask_rcnn import MaskRCNN
 from .mask_scoring_rcnn import MaskScoringRCNN
 from .reppoints_detector import RepPointsDetector
@@ -18,5 +19,5 @@ __all__ = [
     'BaseDetector', 'SingleStageDetector', 'TwoStageDetector', 'RPN',
     'FastRCNN', 'FasterRCNN', 'MaskRCNN', 'CascadeRCNN', 'HybridTaskCascade',
     'DoubleHeadRCNN', 'RetinaNet', 'FCOS', 'GridRCNN', 'MaskScoringRCNN',
-    'RepPointsDetector'
+    'RepPointsDetector', 'LVISMaskRCNN'
 ]

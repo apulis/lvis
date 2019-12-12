@@ -24,6 +24,9 @@ class LoadImageFromFile(object):
         results['img'] = img
         results['img_shape'] = img.shape
         results['ori_shape'] = img.shape
+        if 'neg_category_ids' in results['img_info']:
+            results['neg_category_ids'] = results['img_info'][
+                'neg_category_ids']
         return results
 
     def __repr__(self):

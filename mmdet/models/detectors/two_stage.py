@@ -170,10 +170,13 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
         if self.with_bbox:
             rois = bbox2roi([res.bboxes for res in sampling_results])
             # TODO: a more flexible way to decide which feature maps to use
+            ## (B*512, 256, 7, 7) # noqa
             bbox_feats = self.bbox_roi_extractor(
+                ## x[:4] # noqa
                 x[:self.bbox_roi_extractor.num_inputs], rois)
             if self.with_shared_head:
                 bbox_feats = self.shared_head(bbox_feats)
+            ## each (1024, C) / (1024, 4*C) # noqa
             cls_score, bbox_pred = self.bbox_head(bbox_feats)
 
             bbox_targets = self.bbox_head.get_target(sampling_results,
@@ -219,6 +222,8 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
                                             pos_labels)
             losses.update(loss_mask)
 
+        import pdb
+        pdb.set_trace()
         return losses
 
     def simple_test(self, img, img_meta, proposals=None, rescale=False):
