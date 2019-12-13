@@ -1,6 +1,6 @@
 # model settings
 model = dict(
-    type='LVISMaskRCNN',
+    type='MaskRCNN',
     pretrained='torchvision://resnet50',
     backbone=dict(
         type='ResNet',
@@ -9,13 +9,6 @@ model = dict(
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
         style='pytorch'),
-    global_context_head=dict(
-        type='ContextHead',
-        in_channels=256,
-        num_classes=1230,
-        cfg_channel_gate=dict(pool_types=['avg']),
-        supervise_neg_categories=False,
-        loss=dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
     neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -24,7 +17,6 @@ model = dict(
     rpn_head=dict(
         type='RPNHead',
         in_channels=256,
-        return_rpn_features=True,  # added for LVIS. default: False
         feat_channels=256,
         anchor_scales=[8],
         anchor_ratios=[0.5, 1.0, 2.0],
@@ -50,8 +42,11 @@ model = dict(
         target_stds=[0.1, 0.1, 0.2, 0.2],
         reg_class_agnostic=True,
         loss_cls=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-        loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)),
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
+        loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
+        equalization_cfg=dict(
+            supervise_threshold='c',
+            category_info_path='./category_info.pkl')),
     mask_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=2),
@@ -116,11 +111,11 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
-        # score_thr=0.05,
-        score_thr=0,
+        score_thr=0.05,
+        # score_thr=0,
         nms=dict(type='nms', iou_thr=0.5),
-        # max_per_img=100,
-        max_per_img=300,
+        max_per_img=100,
+        # max_per_img=300,
         mask_thr_binary=0.5))
 # dataset settings
 dataset_type = 'LVISDataset'
@@ -135,12 +130,7 @@ train_pipeline = [
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(
-        type='Collect',
-        keys=['img', 'gt_bboxes', 'gt_labels', 'gt_masks'],
-        meta_keys=('filename', 'ori_shape', 'img_shape', 'pad_shape',
-                   'scale_factor', 'flip', 'img_norm_cfg',
-                   'neg_category_ids')),
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', 'gt_masks']),
 ]
 test_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -164,8 +154,6 @@ data = dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/lvis_v0.5_train.json',
         img_prefix=data_root + 'train2017/',
-        # ann_file=data_root + 'annotations/lvis_v0.5_val.json',
-        # img_prefix=data_root + 'val2017/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
@@ -207,8 +195,7 @@ evaluation = dict(interval=1, iou_type='segm')
 total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/pretrin_coco/mask-rcnn_GCM_PRS-1e-2'
-# finetune on coco dataset
-load_from = 'weights/mask_rcnn_r50_fpn_1x_20181010-069fa190.pth'
+work_dir = './work_dirs/eql-loss/mask-rcnn-r50_PRS-1e-2_eql-loss'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]

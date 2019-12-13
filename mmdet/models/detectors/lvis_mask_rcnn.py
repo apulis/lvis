@@ -202,7 +202,7 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
                                                      gt_bboxes, gt_labels,
                                                      self.train_cfg.rcnn)
             loss_bbox = self.bbox_head.loss(cls_score, bbox_pred,
-                                            *bbox_targets)
+                                            *bbox_targets, img_meta=img_meta)
             losses.update(loss_bbox)
 
         # mask head forward and loss

@@ -14,7 +14,7 @@ model = dict(
         in_channels=256,
         num_classes=1230,
         cfg_channel_gate=dict(pool_types=['avg']),
-        supervise_neg_categories=False,
+        supervise_neg_categories=True,
         loss=dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
     neck=dict(
         type='FPN',
@@ -116,11 +116,11 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
-        # score_thr=0.05,
-        score_thr=0,
+        score_thr=0.05,
+        # score_thr=0,
         nms=dict(type='nms', iou_thr=0.5),
-        # max_per_img=100,
-        max_per_img=300,
+        max_per_img=100,
+        # max_per_img=300,
         mask_thr_binary=0.5))
 # dataset settings
 dataset_type = 'LVISDataset'
@@ -207,7 +207,7 @@ evaluation = dict(interval=1, iou_type='segm')
 total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/pretrin_coco/mask-rcnn_GCM_PRS-1e-2'
+work_dir = './work_dirs/pretrin_coco/mask-rcnn_GCM-avg_GCE_PRS-1e-2'
 # finetune on coco dataset
 load_from = 'weights/mask_rcnn_r50_fpn_1x_20181010-069fa190.pth'
 resume_from = None
