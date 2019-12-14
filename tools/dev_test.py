@@ -30,7 +30,8 @@ def parse_losses(losses):
 
 
 def main():
-    cfg_file = 'configs/lvis/exp/mask-rcnn-FPN-50_GCM-avg_GCE_PRS-1e-2.py'
+    # cfg_file = 'configs/lvis/eql_loss/mask-rcnn-r50_PRS-1e-2_eql-loss.py'
+    cfg_file = 'configs/lvis/exp/mask-rcnn-FPN-50_GCM_PRS-1e-2.py'
     cfg = Config.fromfile(cfg_file)
     cfg.gpus = 1
 
@@ -55,6 +56,8 @@ def main():
         for key, val in log_vars.items():
             print('{}: {:.3f}  '.format(key, val), end='')
         print('')
+        if i == 100:
+            break
 
 
 if __name__ == '__main__':

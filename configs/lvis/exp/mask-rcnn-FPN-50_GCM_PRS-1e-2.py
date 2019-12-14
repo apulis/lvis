@@ -50,6 +50,7 @@ model = dict(
         target_stds=[0.1, 0.1, 0.2, 0.2],
         reg_class_agnostic=True,
         loss_cls=dict(
+            # softmax -> CE loss
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)),
     mask_roi_extractor=dict(
@@ -162,10 +163,10 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/lvis_v0.5_train.json',
-        img_prefix=data_root + 'train2017/',
-        # ann_file=data_root + 'annotations/lvis_v0.5_val.json',
-        # img_prefix=data_root + 'val2017/',
+        # ann_file=data_root + 'annotations/lvis_v0.5_train.json',
+        # img_prefix=data_root + 'train2017/',
+        ann_file=data_root + 'annotations/lvis_v0.5_val.json',
+        img_prefix=data_root + 'val2017/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,

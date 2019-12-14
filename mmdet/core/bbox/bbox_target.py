@@ -13,6 +13,7 @@ def bbox_target(pos_bboxes_list,
                 target_means=[.0, .0, .0, .0],
                 target_stds=[1.0, 1.0, 1.0, 1.0],
                 concat=True):
+    # pos_bboxes_list: each element corresponds to each batch
     labels, label_weights, bbox_targets, bbox_weights = multi_apply(
         bbox_target_single,
         pos_bboxes_list,
@@ -29,6 +30,7 @@ def bbox_target(pos_bboxes_list,
         label_weights = torch.cat(label_weights, 0)
         bbox_targets = torch.cat(bbox_targets, 0)
         bbox_weights = torch.cat(bbox_weights, 0)
+    # labels: [0, 512) -> batch 1, [512, 1024) -> batch 2
     return labels, label_weights, bbox_targets, bbox_weights
 
 
@@ -58,6 +60,7 @@ def bbox_target_single(pos_bboxes,
     if num_neg > 0:
         label_weights[-num_neg:] = 1.0
 
+    # one batch -> length of 512
     return labels, label_weights, bbox_targets, bbox_weights
 
 

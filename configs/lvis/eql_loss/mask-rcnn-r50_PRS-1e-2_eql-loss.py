@@ -1,6 +1,6 @@
 # model settings
 model = dict(
-    type='MaskRCNN',
+    type='LVISMaskRCNN',
     pretrained='torchvision://resnet50',
     backbone=dict(
         type='ResNet',
@@ -42,11 +42,12 @@ model = dict(
         target_stds=[0.1, 0.1, 0.2, 0.2],
         reg_class_agnostic=True,
         loss_cls=dict(
+            # equlaization loss: Sigmoid -> BCE loss
             type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
         equalization_cfg=dict(
             supervise_threshold='c',
-            category_info_path='./category_info.pkl')),
+            category_info_path='./sorted_category_info.pkl')),
     mask_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=2),
@@ -130,7 +131,12 @@ train_pipeline = [
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', 'gt_masks']),
+    dict(
+        type='Collect',
+        keys=['img', 'gt_bboxes', 'gt_labels', 'gt_masks'],
+        meta_keys=('filename', 'ori_shape', 'img_shape', 'pad_shape',
+                   'scale_factor', 'flip', 'img_norm_cfg',
+                   'neg_category_ids')),
 ]
 test_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -154,6 +160,8 @@ data = dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/lvis_v0.5_train.json',
         img_prefix=data_root + 'train2017/',
+        # ann_file=data_root + 'annotations/lvis_v0.5_val.json',
+        # img_prefix=data_root + 'val2017/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
@@ -196,6 +204,6 @@ total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/eql-loss/mask-rcnn-r50_PRS-1e-2_eql-loss'
-load_from = None
+load_from = 'weights/mask_rcnn_r50_fpn_1x_20181010-069fa190.pth'
 resume_from = None
 workflow = [('train', 1)]

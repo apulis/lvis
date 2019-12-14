@@ -1,3 +1,4 @@
+import mmcv
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,6 +9,19 @@ from mmdet.core import (auto_fp16, bbox_target, delta2bbox, force_fp32,
 from ..builder import build_loss
 from ..losses import accuracy
 from ..registry import HEADS
+
+
+def _expand_binary_labels(labels, label_weights, label_channels):
+    bin_labels = labels.new_full((labels.size(0), label_channels), 0)
+    inds = torch.nonzero(labels >= 0).squeeze()
+    if inds.numel() > 0:
+        bin_labels[inds, labels[inds]] = 1
+    if label_weights is None:
+        bin_label_weights = None
+    else:
+        bin_label_weights = label_weights.view(-1, 1).expand(
+            label_weights.size(0), label_channels)
+    return bin_labels, bin_label_weights
 
 
 @HEADS.register_module
@@ -49,7 +63,17 @@ class BBoxHead(nn.Module):
         self.with_equalization = equalization_cfg is not None
         if self.with_equalization:
             # load category_info
+            sorted_category_ids = mmcv.load(
+                equalization_cfg['category_info_path'])
             # process category threshold
+            eq_thresh = equalization_cfg['supervise_threshold']
+            if eq_thresh == 'r':
+                eq_thresh = 454
+            elif eq_thresh == 'c':
+                eq_thresh = 454 + 461
+            else:
+                assert isinstance(eq_thresh, int) and eq_thresh < 1231
+            self.no_supervise_cat_ids = sorted_category_ids[:eq_thresh]
             assert loss_cls['use_sigmoid']
         self.loss_cls = build_loss(loss_cls)
         self.loss_bbox = build_loss(loss_bbox)
@@ -110,19 +134,51 @@ class BBoxHead(nn.Module):
              bbox_targets,
              bbox_weights,
              reduction_override=None,
-             img_meta=None):
+             img_metas=None):
+        # labels: first 512 -> batch 1, last 512 -> batch 2
         losses = dict()
+        avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
         if cls_score is not None:
             if self.with_equalization:
-                assert img_meta is not None
-                # neg labels
-            avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
-            losses['loss_cls'] = self.loss_cls(
-                cls_score,
-                labels,
-                label_weights,
-                avg_factor=avg_factor,
-                reduction_override=reduction_override)
+                assert img_metas is not None
+                gt_neg_labels = []
+                for i, img_meta in enumerate(img_metas):
+                    gt_neg_labels.append(img_meta['neg_category_ids'])
+                # make label weights to 0 for rare / common categories
+                # for union of pos and neg label set -> make weights to 1
+                n_props = int(labels.size(0) / len(img_metas))
+                # binary labels and weights
+                bin_labels, _ = _expand_binary_labels(labels, label_weights,
+                                                      cls_score.size(-1))
+                label_weights = labels.new_ones(
+                    bin_labels.size(), dtype=torch.long)
+                for idx in range(len(img_metas)):
+                    # batchwise -> same category supervision
+                    # 'rare', 'common' categories -> wipe out for supervision
+                    label_weights[idx * n_props:(idx + 1) *
+                                  n_props, self.no_supervise_cat_ids] = 0
+                    # negative category set (gt) -> supervise
+                    label_weights[idx * n_props:(idx + 1) *
+                                  n_props, gt_neg_labels[i]] = 1
+                    label_subset = labels[idx * n_props:(idx + 1) * n_props]
+                    # positive category set (gt) -> supervise
+                    label_weights[idx * n_props:(idx + 1) *
+                                  n_props, label_subset] = 1
+                avg_factor = max(
+                    torch.sum(label_weights > 0).float().item(), 1.)
+                losses['loss_cls'] = self.loss_cls(
+                    cls_score,
+                    bin_labels,
+                    label_weights,
+                    avg_factor=avg_factor,
+                    reduction_override=reduction_override)
+            else:
+                losses['loss_cls'] = self.loss_cls(
+                    cls_score,
+                    labels,
+                    label_weights,
+                    avg_factor=avg_factor,
+                    reduction_override=reduction_override)
             losses['acc'] = accuracy(cls_score, labels)
         if bbox_pred is not None:
             pos_inds = labels > 0

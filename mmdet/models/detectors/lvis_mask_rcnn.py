@@ -13,7 +13,7 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
 
     def __init__(self,
                  backbone,
-                 global_context_head,
+                 global_context_head=None,
                  neck=None,
                  shared_head=None,
                  rpn_head=None,
@@ -26,7 +26,11 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
                  pretrained=None):
         super(LVISMaskRCNN, self).__init__()
         self.backbone = builder.build_backbone(backbone)
-        self.context_head = builder.build_head(global_context_head)
+
+        self.with_context_head = global_context_head is not None
+        if global_context_head is not None:
+            self.context_head = builder.build_head(global_context_head)
+
         if neck is not None:
             self.neck = builder.build_neck(neck)
 
@@ -69,7 +73,8 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
                     m.init_weights()
             else:
                 self.neck.init_weights()
-        self.context_head.init_weights()
+        if self.with_context_head:
+            self.context_head.init_weights()
         if self.with_shared_head:
             self.shared_head.init_weights(pretrained=pretrained)
         if self.with_rpn:
@@ -131,10 +136,12 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
         # RPN forward and loss
         if self.with_rpn:
             rpn_outs_ = self.rpn_head(x)
-            # (cls_score, bbox_preds)
             rpn_outs = rpn_outs_[:2]
-            # features before cls / reg layer
-            rpn_feats = rpn_outs_[2]
+            # (cls_score, bbox_preds)
+            if self.with_context_head:
+                # features before cls / reg layer
+                rpn_feats = rpn_outs_[2]
+
             rpn_loss_inputs = rpn_outs + (gt_bboxes, img_meta,
                                           self.train_cfg.rpn)
             rpn_losses = self.rpn_head.loss(
@@ -147,12 +154,15 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
             proposal_list = self.rpn_head.get_bboxes(*proposal_inputs)
         else:
             proposal_list = proposals
-        context_scale, context_preds = self.context_head(rpn_feats)
-        context_labels, label_weights = self.context_head.get_target(
-            gt_labels, img_meta)
-        context_loss = self.context_head.loss(context_preds, context_labels,
-                                              label_weights)
-        losses.update(context_loss)
+
+        if self.with_context_head:
+            context_scale, context_preds = self.context_head(rpn_feats)
+            context_labels, label_weights = self.context_head.get_target(
+                gt_labels, img_meta)
+            context_loss = self.context_head.loss(context_preds,
+                                                  context_labels,
+                                                  label_weights)
+            losses.update(context_loss)
 
         # assign gts and sample proposals
         if self.with_bbox or self.with_mask:
@@ -188,21 +198,25 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
             if self.with_shared_head:
                 bbox_feats = self.shared_head(bbox_feats)
             # proposal context injection
-            num_batches = len(img_meta)
-            C, H, W = bbox_feats.size()[1:]
-            # (# props, B, C, H, W)
-            bbox_feats = bbox_feats.view(-1, num_batches, C, H, W)
-            bbox_feats = bbox_feats * context_scale.expand_as(
-                bbox_feats) + bbox_feats
-            bbox_feats = bbox_feats.view(-1, C, H, W)
+            if self.with_context_head:
+                num_batches = len(img_meta)
+                C, H, W = bbox_feats.size()[1:]
+                # (# props, B, C, H, W)
+                # bbox_feats = bbox_feats.view(-1, num_batches, C, H, W)
+                bbox_feats = bbox_feats.view(num_batches, -1, C, H,
+                                             W).transpose(0, 1)
+                bbox_feats = bbox_feats * context_scale.expand_as(
+                    bbox_feats) + bbox_feats
+                bbox_feats = bbox_feats.transpose(0, 1)
+                bbox_feats = bbox_feats.view(-1, C, H, W)
             ## each (1024, C) / (1024, 4*C) # noqa
             cls_score, bbox_pred = self.bbox_head(bbox_feats)
 
             bbox_targets = self.bbox_head.get_target(sampling_results,
                                                      gt_bboxes, gt_labels,
                                                      self.train_cfg.rcnn)
-            loss_bbox = self.bbox_head.loss(cls_score, bbox_pred,
-                                            *bbox_targets, img_meta=img_meta)
+            loss_bbox = self.bbox_head.loss(
+                cls_score, bbox_pred, *bbox_targets, img_metas=img_meta)
             losses.update(loss_bbox)
 
         # mask head forward and loss
@@ -215,18 +229,14 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
                 if self.with_shared_head:
                     mask_feats = self.shared_head(mask_feats)
                 # context injection
-                for i in range(num_batches):
-                    # batch-wise mask feature
-                    # mask_feat = mask_feats[pos_rois[:, 0] == i]
-                    mask_feats[pos_rois[:, 0] == i].addcmul_(
-                        value=1,
-                        tensor1=context_scale[i].expand_as(
-                            mask_feats[pos_rois[:, 0] == i]),
-                        tensor2=mask_feats[pos_rois[:, 0] == i])
-                    # mask_feats[pos_rois[:, 0] == i] = mask_feats[
-                    #    pos_rois[:, 0] == i] * context_scale[i].expand_as(
-                    #        mask_feats[pos_rois[:, 0] == i]) + mask_feats[
-                    #            pos_rois[:, 0] == i]
+                if self.with_context_head:
+                    for i in range(num_batches):
+                        # batch-wise mask feature
+                        mask_feats[pos_rois[:, 0] == i].addcmul_(
+                            value=1,
+                            tensor1=context_scale[i].expand_as(
+                                mask_feats[pos_rois[:, 0] == i]),
+                            tensor2=mask_feats[pos_rois[:, 0] == i])
             else:
                 pos_inds = []
                 device = bbox_feats.device
@@ -263,14 +273,17 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
         if proposals is None:
             rpn_outs_ = self.rpn_head(x)
             rpn_outs = rpn_outs_[:2]
-            rpn_feats = rpn_outs_[2]
+            if self.with_context_head:
+                rpn_feats = rpn_outs_[2]
             proposal_inputs = rpn_outs + (img_meta, self.test_cfg.rpn)
             proposal_list = self.rpn_head.get_bboxes(*proposal_inputs)
         else:
             proposals
 
-        # context prediction
-        context_scale, context_preds = self.context_head(rpn_feats)
+        context_scale = None
+        if self.with_context_head:
+            # context prediction
+            context_scale, context_preds = self.context_head(rpn_feats)
 
         det_bboxes, det_labels = self.simple_test_bboxes(
             x,
@@ -286,7 +299,12 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
             return bbox_results
         else:
             segm_results = self.simple_test_mask(
-                x, img_meta, det_bboxes, det_labels, rescale=rescale)
+                x,
+                img_meta,
+                det_bboxes,
+                det_labels,
+                rescale=rescale,
+                context_scale=context_scale)
             return bbox_results, segm_results
 
     def aug_test(self, imgs, img_metas, rescale=False):
