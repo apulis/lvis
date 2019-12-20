@@ -208,7 +208,7 @@ evaluation = dict(interval=1, iou_type='segm')
 total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/pretrin_coco/mask-rcnn_GCM_PRS-1e-2'
+work_dir = './work_dirs/pretrin_coco/mask-rcnn_GCM-avg_PRS-1e-2'
 # finetune on coco dataset
 load_from = 'weights/mask_rcnn_r50_fpn_1x_20181010-069fa190.pth'
 resume_from = None

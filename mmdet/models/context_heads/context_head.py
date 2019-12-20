@@ -40,8 +40,8 @@ class ContextHead(nn.Module):
             gt_neg_labels = self.get_neg_cat_ids(img_metas)
             labels = gt_pos_labels[0].new_zeros((num_imgs, self.num_classes),
                                                 dtype=torch.long)
-            label_weights = labels.new_zeros(
-                (num_imgs, self.num_classes), dtype=torch.long)
+            label_weights = labels.new_zeros((num_imgs, self.num_classes),
+                                             dtype=torch.long)
 
             for i, gt_pos_label in enumerate(gt_pos_labels):
                 pos_label_inds = list(set((gt_pos_label - 1).tolist()))
@@ -49,18 +49,20 @@ class ContextHead(nn.Module):
                 label_weights[i][pos_label_inds] = 1
 
             for i, gt_neg_label in enumerate(gt_neg_labels):
-                label_weights[i][[label-1 for label in gt_neg_label]] = 1
+                label_weights[i][[label - 1 for label in gt_neg_label]] = 1
         else:
             labels = gt_pos_labels[0].new_zeros((num_imgs, self.num_classes),
                                                 dtype=torch.long)
             for i, gt_pos_label in enumerate(gt_pos_labels):
                 labels[i][list(set((gt_pos_label - 1).tolist()))] = 1
-            label_weights = labels.new_ones(self.num_classes, dtype=torch.long)
+            label_weights = labels.new_ones((num_imgs, self.num_classes),
+                                            dtype=torch.long)
         return labels, label_weights
 
     @force_fp32(apply_to=('cls_score'))
     def loss(self, cls_score, labels, label_weights, reduction_override=None):
         losses = dict()
+        # avg_factor = max(float(label_weights.size(0)), 1.)
         avg_factor = (label_weights > 0).sum().item()
         loss = self.context_loss(
             cls_score, labels, label_weights, avg_factor=avg_factor)

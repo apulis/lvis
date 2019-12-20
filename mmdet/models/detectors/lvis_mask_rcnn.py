@@ -199,16 +199,29 @@ class LVISMaskRCNN(BaseDetector, BBoxTestMixin, MaskTestMixin):
                 bbox_feats = self.shared_head(bbox_feats)
             # proposal context injection
             if self.with_context_head:
-                num_batches = len(img_meta)
-                C, H, W = bbox_feats.size()[1:]
-                # (# props, B, C, H, W)
-                # bbox_feats = bbox_feats.view(-1, num_batches, C, H, W)
-                bbox_feats = bbox_feats.view(num_batches, -1, C, H,
-                                             W).transpose(0, 1)
-                bbox_feats = bbox_feats * context_scale.expand_as(
-                    bbox_feats) + bbox_feats
-                bbox_feats = bbox_feats.transpose(0, 1)
-                bbox_feats = bbox_feats.view(-1, C, H, W)
+                num_batches = len(sampling_results)
+                assert num_batches == len(img_meta)
+                count_idx = 0
+                for i in range(num_batches):
+                    num_props = sampling_results[i].bboxes.size(0)
+                    # batchwise: (512, 256, 7, 7)
+                    # bbox_feat = bbox_feats[count_idx:count_idx + num_props]
+                    # batchwise: (C, 1, 1) -> (512, 256, 7, 7)
+                    # scaler = context_scale[i].expand_as(
+                    #     bbox_feats[count_idx:count_idx + num_props])
+                    # context_scale: (B, C, 1, 1)
+                    bbox_feats[count_idx:count_idx + num_props] = bbox_feats[
+                        count_idx:count_idx + num_props].clone(
+                        ) + bbox_feats[count_idx:count_idx + num_props].clone(
+                        ) * context_scale[i].expand_as(
+                            bbox_feats[count_idx:count_idx +
+                                       num_props].clone())
+                    # bbox_feats[count_idx:count_idx + num_props].addcmul_(
+                    #     value=1,
+                    #     tensor1=context_scale[i].expand_as(
+                    #         bbox_feats[count_idx:count_idx + num_props]),
+                    #     tensor2=bbox_feats[count_idx:count_idx + num_props])
+                    count_idx += num_props
             ## each (1024, C) / (1024, 4*C) # noqa
             cls_score, bbox_pred = self.bbox_head(bbox_feats)
 

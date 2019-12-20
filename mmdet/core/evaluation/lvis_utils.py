@@ -28,7 +28,7 @@ def lvis_eval(result_files, result_types, lvis, max_dets=100):
 
         # Compute per-category AP
         # from https://github.com/facebookresearch/detectron2/blob/03064eb5bafe4a3e5750cc7a16672daf5afe8435/detectron2/evaluation/coco_evaluation.py#L259-L283 # noqa
-        if True:
+        if False:
             precisions = lvis_eval.eval['precision']
             catIds = lvis.get_cat_ids()
             # precision has dims (iou, recall, cls, area range, max dets)

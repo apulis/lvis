@@ -73,7 +73,7 @@ class BBoxHead(nn.Module):
                 eq_thresh = 454 + 461
             else:
                 assert isinstance(eq_thresh, int) and eq_thresh < 1231
-            self.no_supervise_cat_ids = sorted_category_ids[:eq_thresh]
+            self.supervise_cat_ids = sorted_category_ids[eq_thresh:]
             assert loss_cls['use_sigmoid']
         self.loss_cls = build_loss(loss_cls)
         self.loss_bbox = build_loss(loss_bbox)
@@ -150,22 +150,28 @@ class BBoxHead(nn.Module):
                 # binary labels and weights
                 bin_labels, _ = _expand_binary_labels(labels, label_weights,
                                                       cls_score.size(-1))
-                label_weights = labels.new_ones(
+                # first all zeros
+                label_weights = labels.new_zeros(
                     bin_labels.size(), dtype=torch.long)
+
+                # for background labels, supervise all categories
+                label_weights[labels == 0, :] = 1
                 for idx in range(len(img_metas)):
                     # batchwise -> same category supervision
                     # 'rare', 'common' categories -> wipe out for supervision
                     label_weights[idx * n_props:(idx + 1) *
-                                  n_props, self.no_supervise_cat_ids] = 0
+                                  n_props, self.supervise_cat_ids] = 1
                     # negative category set (gt) -> supervise
                     label_weights[idx * n_props:(idx + 1) *
                                   n_props, gt_neg_labels[i]] = 1
-                    label_subset = labels[idx * n_props:(idx + 1) * n_props]
+                    pos_label_subset = set(labels[idx * n_props:(idx + 1) *
+                                                  n_props].tolist())
                     # positive category set (gt) -> supervise
-                    label_weights[idx * n_props:(idx + 1) *
-                                  n_props, label_subset] = 1
-                avg_factor = max(
-                    torch.sum(label_weights > 0).float().item(), 1.)
+                    label_weights[idx * n_props:(idx + 1) * n_props,
+                                  list(pos_label_subset)] = 1
+                avg_factor = max(float(label_weights.size(0)), 1.)
+                # avg_factor = max(
+                #     torch.sum(label_weights > 0).float().item(), 1.)
                 losses['loss_cls'] = self.loss_cls(
                     cls_score,
                     bin_labels,
@@ -206,7 +212,11 @@ class BBoxHead(nn.Module):
                        cfg=None):
         if isinstance(cls_score, list):
             cls_score = sum(cls_score) / float(len(cls_score))
-        scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
+        if self.with_equalization:
+            scores = F.sigmoid(cls_score) if cls_score is not None else None
+        else:
+            scores = F.softmax(
+                cls_score, dim=1) if cls_score is not None else None
 
         if bbox_pred is not None:
             bboxes = delta2bbox(rois[:, 1:], bbox_pred, self.target_means,
