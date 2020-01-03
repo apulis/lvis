@@ -183,8 +183,6 @@ class LVISDistEvalmAPHook(DistEvalHook):
             print('Nothing to evaluate.')
             return
 
-        # res_types = ['bbox', 'segm'
-        #             ] if runner.model.module.with_mask else ['bbox']
         for res_type in self.iou_type:
             if res_type not in ['bbox', 'segm']:
                 raise KeyError(

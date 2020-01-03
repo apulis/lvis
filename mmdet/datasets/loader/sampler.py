@@ -7,6 +7,8 @@ from mmcv.runner.utils import get_dist_info
 from torch.utils.data import DistributedSampler as _DistributedSampler
 from torch.utils.data import Sampler
 
+from ..transforms import CurriculumFunc
+
 
 class DistributedSampler(_DistributedSampler):
 
@@ -36,20 +38,25 @@ class DistributedSampler(_DistributedSampler):
 
 class DistributedRepeatedRandomSampler(_DistributedSampler):
 
-    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True):
+    def __init__(self,
+                 dataset,
+                 sampling_cfg,
+                 num_replicas=None,
+                 rank=None,
+                 shuffle=True):
         super().__init__(dataset, num_replicas=num_replicas, rank=rank)
         self.shuffle = shuffle
-        self.repeated_img_indices = self.dataset.img_ids
+
+        self.thres = sampling_cfg['thres']
+        self.max_epochs = sampling_cfg['max_epochs']
+        self.curriculum_func = CurriculumFunc(sampling_cfg['func'])
+
+        self.repeat_factors = self._compute_repeat_factors()
 
     def __iter__(self):
         if self.shuffle:
-            img_indices = self.repeated_img_indices
-            g = torch.Generator()
-            g.manual_seed(self.epoch)
-            rand_indices = torch.randperm(
-                len(img_indices), generator=g).tolist()[:len(self.dataset)]
-            effective_indices = img_indices[rand_indices].tolist()
-            indices = effective_indices.copy()
+            # after impelemntation, check all process have same indices
+            indices = self._get_epoch_indices()
         else:
             indices = torch.arange(len(self.dataset)).tolist()
 
@@ -61,14 +68,65 @@ class DistributedRepeatedRandomSampler(_DistributedSampler):
         indices = indices[self.rank:self.total_size:self.num_replicas]
         assert len(indices) == self.num_samples
 
-        if self.rank == 0:
-            print(
-                'epoch: {}, total copied: {}, len(set(dataset)): {}\n'.format(
-                    self.epoch, len(img_indices), len(set(effective_indices))))
         return iter(indices)
 
-    def set_repeated_indices(self, repeated_indices):
-        self.repeated_img_indices = np.asarray(repeated_indices, dtype=np.int)
+    def _compute_repeat_factors(self):
+        # 1. compute category repeat factors
+        cats = self.dataset.lvis.load_cats(self.dataset.cat_ids)
+        cat_freqs = np.zeros(len(cats))
+        for i, cat in enumerate(cats):
+            cat_freqs[i] = cat['image_count'] / len(self.dataset.img_ids)
+        cat_repeat_factors = np.maximum(1, np.sqrt(self.thres / cat_freqs))
+
+        # 2. compute image repeat factors
+        img_repeat_factors = []
+        for i, img_info in enumerate(self.dataset.img_infos):
+            img_id = img_info['id']
+            ann_ids = self.dataset.lvis.get_ann_ids(img_ids=[img_id])
+            anns = self.dataset.lvis.load_anns(ids=ann_ids)
+
+            cats_in_img = {ann['category_id'] for ann in anns}
+            cat_repeat_factors_in_img = []
+            for unique_cat_id in list(cats_in_img):
+                cat_repeat_factors_in_img.append(
+                    cat_repeat_factors[unique_cat_id - 1])
+            img_repeat_factors.append(np.max(cat_repeat_factors_in_img))
+
+        return torch.tensor(img_repeat_factors, dtype=torch.float32)
+
+    def _get_epoch_indices(self):
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+
+        # apply curriculum on repeat factors
+        phase = self.epoch / (self.max_epochs - 1)
+        alpha = self.curriculum_func(phase)
+        rep_factors = (1 - alpha) + alpha * self.repeat_factors.clone()
+
+        # stochastic rounding on repeat factors so that repeat factors slightly
+        # differ for every epoch.
+        rep_int_part = torch.trunc(rep_factors)
+        rep_frac_part = rep_factors - rep_int_part
+        rands = torch.rand(len(rep_frac_part), generator=g)
+        stochastic_rep_factors = rep_int_part + (rands < rep_frac_part).float()
+
+        # Construct a list of indices in which we repeat images as specified
+        img_indices = []
+        for dataset_index, rep_factor in enumerate(stochastic_rep_factors):
+            img_indices.extend([dataset_index] * int(rep_factor.item()))
+
+        # image index list for every epoch reflected repeatation
+        rand_indices = torch.randperm(
+            len(img_indices), generator=g).tolist()[:len(self.dataset)]
+        indices = np.asarray(img_indices)[rand_indices].tolist()
+
+        if self.rank == 0:
+            log_str = 'Epoch: {}/{}, '.format(self.epoch + 1, self.max_epochs)
+            log_str += 'total copied indices: {}, net indices: {}, '.format(
+                len(img_indices), len(set(indices)))
+            log_str += 'len(dataset): {}'.format(len(self.dataset))
+            print(log_str)
+        return indices
 
 
 class GroupSampler(Sampler):

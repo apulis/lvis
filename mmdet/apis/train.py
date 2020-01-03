@@ -3,13 +3,14 @@ import re
 from collections import OrderedDict
 
 import torch
+import torch.distributed as dist
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import DistSamplerSeedHook, Runner, obj_from_dict
 
 from mmdet import datasets
 from mmdet.core import (CocoDistEvalmAPHook, CocoDistEvalRecallHook,
                         DistEvalmAPHook, DistOptimizerHook, Fp16OptimizerHook,
-                        LVISDistEvalmAPHook, RepeatFactorSamplingHook)
+                        LVISDistEvalmAPHook)
 from mmdet.datasets import DATASETS, build_dataloader
 from mmdet.models import RPN
 from .env import get_root_logger
@@ -29,8 +30,12 @@ def parse_losses(losses):
     loss = sum(_value for _key, _value in log_vars.items() if 'loss' in _key)
 
     log_vars['loss'] = loss
-    for name in log_vars:
-        log_vars[name] = log_vars[name].item()
+    for loss_name, loss_value in log_vars.items():
+        # reduce loss when distributed training
+        if dist.is_initialized():
+            loss_value = loss_value.data.clone()
+            dist.all_reduce(loss_value.div_(dist.get_world_size()))
+        log_vars[loss_name] = loss_value.item()
 
     return loss, log_vars
 
@@ -138,14 +143,13 @@ def build_optimizer(model, optimizer_cfg):
 def _dist_train(model, dataset, cfg, validate=False):
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
-    repeated_sampling = cfg.sampling_scheduler_cfg is not None
     data_loaders = [
         build_dataloader(
             ds,
             cfg.data.imgs_per_gpu,
             cfg.data.workers_per_gpu,
             dist=True,
-            repeated_sampling=repeated_sampling) for ds in dataset
+            sampling_cfg=cfg.sampling_cfg) for ds in dataset
     ]
     # put model on gpus
     model = MMDistributedDataParallel(model.cuda())
@@ -166,10 +170,6 @@ def _dist_train(model, dataset, cfg, validate=False):
     runner.register_training_hooks(cfg.lr_config, optimizer_config,
                                    cfg.checkpoint_config, cfg.log_config)
     runner.register_hook(DistSamplerSeedHook())
-    if repeated_sampling:
-        runner.register_hook(
-            RepeatFactorSamplingHook(data_loaders[0],
-                                     **cfg.sampling_scheduler_cfg))
 
     # register eval hooks
     if validate:

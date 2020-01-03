@@ -11,19 +11,6 @@ from ..losses import accuracy
 from ..registry import HEADS
 
 
-def _expand_binary_labels(labels, label_weights, label_channels):
-    bin_labels = labels.new_full((labels.size(0), label_channels), 0)
-    inds = torch.nonzero(labels >= 0).squeeze()
-    if inds.numel() > 0:
-        bin_labels[inds, labels[inds]] = 1
-    if label_weights is None:
-        bin_label_weights = None
-    else:
-        bin_label_weights = label_weights.view(-1, 1).expand(
-            label_weights.size(0), label_channels)
-    return bin_labels, bin_label_weights
-
-
 @HEADS.register_module
 class BBoxHead(nn.Module):
     """Simplest RoI head, with only two fc layers for classification and
@@ -107,8 +94,15 @@ class BBoxHead(nn.Module):
         bbox_pred = self.fc_reg(x) if self.with_reg else None
         return cls_score, bbox_pred
 
-    def get_target(self, sampling_results, gt_bboxes, gt_labels,
-                   rcnn_train_cfg):
+    def get_target(self,
+                   sampling_results,
+                   gt_bboxes,
+                   gt_labels,
+                   rcnn_train_cfg,
+                   img_metas=None,
+                   num_classes=80 + 1):
+        if not self.with_equalization:
+            img_metas = [None for _ in range(len(img_metas))]
         pos_proposals = [res.pos_bboxes for res in sampling_results]
         neg_proposals = [res.neg_bboxes for res in sampling_results]
         pos_gt_bboxes = [res.pos_gt_bboxes for res in sampling_results]
@@ -122,7 +116,9 @@ class BBoxHead(nn.Module):
             rcnn_train_cfg,
             reg_classes,
             target_means=self.target_means,
-            target_stds=self.target_stds)
+            target_stds=self.target_stds,
+            img_metas=img_metas,
+            num_classes=num_classes)
         return cls_reg_targets
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))
@@ -133,66 +129,32 @@ class BBoxHead(nn.Module):
              label_weights,
              bbox_targets,
              bbox_weights,
-             reduction_override=None,
-             img_metas=None):
+             reduction_override=None):
         # labels: first 512 -> batch 1, last 512 -> batch 2
         losses = dict()
         avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
+        if self.with_equalization:
+            labels_cat = torch.nonzero(labels > 0)[:, 1]
+        else:
+            labels_cat = labels
         if cls_score is not None:
             if self.with_equalization:
-                assert img_metas is not None
-                gt_neg_labels = []
-                for i, img_meta in enumerate(img_metas):
-                    gt_neg_labels.append(img_meta['neg_category_ids'])
-                # make label weights to 0 for rare / common categories
-                # for union of pos and neg label set -> make weights to 1
-                n_props = int(labels.size(0) / len(img_metas))
-                # binary labels and weights
-                bin_labels, _ = _expand_binary_labels(labels, label_weights,
-                                                      cls_score.size(-1))
-                # first all zeros
-                label_weights = labels.new_zeros(
-                    bin_labels.size(), dtype=torch.long)
-
-                # for background labels, supervise all categories
-                label_weights[labels == 0, :] = 1
-                for idx in range(len(img_metas)):
-                    # batchwise -> same category supervision
-                    # 'rare', 'common' categories -> wipe out for supervision
-                    label_weights[idx * n_props:(idx + 1) *
-                                  n_props, self.supervise_cat_ids] = 1
-                    # negative category set (gt) -> supervise
-                    label_weights[idx * n_props:(idx + 1) *
-                                  n_props, gt_neg_labels[i]] = 1
-                    pos_label_subset = set(labels[idx * n_props:(idx + 1) *
-                                                  n_props].tolist())
-                    # positive category set (gt) -> supervise
-                    label_weights[idx * n_props:(idx + 1) * n_props,
-                                  list(pos_label_subset)] = 1
-                avg_factor = max(float(label_weights.size(0)), 1.)
-                # avg_factor = max(
-                #     torch.sum(label_weights > 0).float().item(), 1.)
-                losses['loss_cls'] = self.loss_cls(
-                    cls_score,
-                    bin_labels,
-                    label_weights,
-                    avg_factor=avg_factor,
-                    reduction_override=reduction_override)
-            else:
-                losses['loss_cls'] = self.loss_cls(
-                    cls_score,
-                    labels,
-                    label_weights,
-                    avg_factor=avg_factor,
-                    reduction_override=reduction_override)
-            losses['acc'] = accuracy(cls_score, labels)
+                label_weights[:, self.supervise_cat_ids] = 1.0
+                avg_factor = label_weights.size(0)
+            losses['loss_cls'] = self.loss_cls(
+                cls_score,
+                labels,
+                label_weights,
+                avg_factor=avg_factor,
+                reduction_override=reduction_override)
+            losses['acc'] = accuracy(cls_score, labels_cat)
         if bbox_pred is not None:
-            pos_inds = labels > 0
+            pos_inds = labels_cat > 0
             if self.reg_class_agnostic:
                 pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), 4)[pos_inds]
             else:
-                pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), -1,
-                                               4)[pos_inds, labels[pos_inds]]
+                pos_bbox_pred = bbox_pred.view(
+                    bbox_pred.size(0), -1, 4)[pos_inds, labels_cat[pos_inds]]
             losses['loss_bbox'] = self.loss_bbox(
                 pos_bbox_pred,
                 bbox_targets[pos_inds],
@@ -213,7 +175,9 @@ class BBoxHead(nn.Module):
         if isinstance(cls_score, list):
             cls_score = sum(cls_score) / float(len(cls_score))
         if self.with_equalization:
-            scores = F.sigmoid(cls_score) if cls_score is not None else None
+            # scores = F.sigmoid(cls_score) if cls_score is not None else None
+            scores = F.softmax(
+                cls_score, dim=1) if cls_score is not None else None
         else:
             scores = F.softmax(
                 cls_score, dim=1) if cls_score is not None else None

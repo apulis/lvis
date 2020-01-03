@@ -4,7 +4,7 @@ import torch
 
 __all__ = [
     'ImageTransform', 'BboxTransform', 'MaskTransform', 'SegMapTransform',
-    'Numpy2Tensor'
+    'Numpy2Tensor', 'CurriculumFunc'
 ]
 
 
@@ -164,3 +164,28 @@ class Numpy2Tensor(object):
             return torch.from_numpy(args[0])
         else:
             return tuple([torch.from_numpy(np.array(array)) for array in args])
+
+
+class CurriculumFunc(object):
+
+    def __init__(self, func):
+        func_names = [
+            'const', 'linear', 'quadratic_convex', 'quadratic_concave'
+        ]
+        assert func in func_names, '{} is not a valid function name.'
+        self.func = eval('self.' + func)
+
+    def const(self, phase):
+        return 1.0
+
+    def linear(self, phase):
+        return phase
+
+    def quadratic_convex(self, phase):
+        return phase**2
+
+    def quadratic_concave(self, phase):
+        return 2 * phase - phase**2
+
+    def __call__(self, phase):
+        return self.func(phase)

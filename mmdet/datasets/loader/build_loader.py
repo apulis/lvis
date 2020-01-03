@@ -23,13 +23,14 @@ def build_dataloader(dataset,
                      dist=True,
                      **kwargs):
     shuffle = kwargs.get('shuffle', True)
-    repeated_sampling = kwargs.pop('repeated_sampling', False)
+    sampling_cfg = kwargs.pop('sampling_cfg', None)
+    with_repeated_sampling = sampling_cfg is not None
     if dist:
         rank, world_size = get_dist_info()
         if shuffle:
-            if repeated_sampling:
+            if with_repeated_sampling:
                 sampler = DistributedRepeatedRandomSampler(
-                    dataset, num_replicas=world_size, rank=rank)
+                    dataset, sampling_cfg, num_replicas=world_size, rank=rank)
             else:
                 sampler = DistributedGroupSampler(dataset, imgs_per_gpu,
                                                   world_size, rank)

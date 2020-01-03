@@ -18,9 +18,9 @@ def main():
         default=['segm'],
         help='result types')
     parser.add_argument(
-        '--max-dets',
+        '--max_dets',
         type=int,
-        default=300,
+        default=100,
         help='proposal numbers, only used for recall evaluation')
     args = parser.parse_args()
     cfg = mmcv.Config.fromfile(args.config)

@@ -203,11 +203,12 @@ def main():
                     if issubclass(dataset_type, datasets.CocoDataset):
                         coco_eval(result_files, eval_types, dataset.coco)
                     elif issubclass(dataset_type, datasets.LVISDataset):
+                        max_dets = cfg.test_cfg['rcnn']['max_per_img']
                         lvis_eval(
                             result_files,
                             eval_types,
                             dataset.lvis,
-                            max_dets=300)
+                            max_dets=max_dets)
                     else:
                         raise ValueError(
                             '{} is not supported type for evaluation'.format(
