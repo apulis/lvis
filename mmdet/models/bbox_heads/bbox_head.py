@@ -123,10 +123,7 @@ class BBoxHead(nn.Module):
                 bin_labels, bin_label_weights = _expand_binary_labels(
                     _labels, _label_weights, self.num_classes)
                 if not self.propagate_labels:
-                    # weight normalization
-                    label_weights = bin_label_weights.float(
-                    ) / self.num_classes
-                    return bin_labels, label_weights, bbox_targets, bbox_weights, target_meta  # noqa
+                    return bin_labels, bin_label_weights, bbox_targets, bbox_weights, target_meta  # noqa
                 # propagate on graph
                 assert self.graph is not None
                 pos_inds = _labels > 0
