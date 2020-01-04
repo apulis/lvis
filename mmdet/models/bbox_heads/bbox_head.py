@@ -137,7 +137,7 @@ class BBoxHead(nn.Module):
                     bin_labels[pos_inds, 1:].float(), self.graph)
                 label_weights[neg_inds, 0] = 1.0
                 labels = (label_weights.clone() > 0).long()
-                if self.label_weights_loss == 'sigmoid':
+                if self.label_weight_loss == 'sigmoid':
                     label_weights = label_weights.new_ones(
                         label_weights.size(), dtype=torch.float)
                 return labels, label_weights, bbox_targets, bbox_weights, target_meta  # noqa
