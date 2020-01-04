@@ -40,22 +40,13 @@ class BBoxTestMixin(object):
                            img_meta,
                            proposals,
                            rcnn_test_cfg,
-                           rescale=False,
-                           context_scale=None):
+                           rescale=False):
         """Test only det bboxes without augmentation."""
         rois = bbox2roi(proposals)
         roi_feats = self.bbox_roi_extractor(
             x[:len(self.bbox_roi_extractor.featmap_strides)], rois)
         if self.with_shared_head:
             roi_feats = self.shared_head(roi_feats)
-        if context_scale is not None:
-            num_batches = context_scale.size(0)
-            C, H, W = roi_feats.size()[1:]
-            # (# props, B, C, H, W)
-            roi_feats = roi_feats.view(-1, num_batches, C, H, W)
-            roi_feats = roi_feats * context_scale.expand_as(
-                roi_feats) + roi_feats
-            roi_feats = roi_feats.view(-1, C, H, W)
         cls_score, bbox_pred = self.bbox_head(roi_feats)
         img_shape = img_meta[0]['img_shape']
         scale_factor = img_meta[0]['scale_factor']
@@ -114,8 +105,7 @@ class MaskTestMixin(object):
                          img_meta,
                          det_bboxes,
                          det_labels,
-                         rescale=False,
-                         context_scale=None):
+                         rescale=False):
         # image shape of the first image in the batch (only one)
         ori_shape = img_meta[0]['ori_shape']
         scale_factor = img_meta[0]['scale_factor']
@@ -131,13 +121,6 @@ class MaskTestMixin(object):
                 x[:len(self.mask_roi_extractor.featmap_strides)], mask_rois)
             if self.with_shared_head:
                 mask_feats = self.shared_head(mask_feats)
-            if context_scale is not None:
-                num_batches = context_scale.size(0)
-                C, H, W = mask_feats.size()[1:]
-                mask_feats = mask_feats.view(-1, num_batches, C, H, W)
-                mask_feats = mask_feats * context_scale.unsqueeze(0).expand_as(
-                    mask_feats) + mask_feats
-                mask_feats = mask_feats.view(-1, C, H, W)
             mask_pred = self.mask_head(mask_feats)
             segm_result = self.mask_head.get_seg_masks(mask_pred, _bboxes,
                                                        det_labels,

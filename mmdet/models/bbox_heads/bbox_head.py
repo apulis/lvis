@@ -1,4 +1,3 @@
-import mmcv
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,6 +8,19 @@ from mmdet.core import (auto_fp16, bbox_target, delta2bbox, force_fp32,
 from ..builder import build_loss
 from ..losses import accuracy
 from ..registry import HEADS
+
+
+def _expand_binary_labels(labels, label_weights, label_channels):
+    bin_labels = labels.new_full((labels.size(0), label_channels), 0)
+    inds = torch.nonzero(labels >= 0).squeeze()
+    if inds.numel() > 0:
+        bin_labels[inds, labels[inds]] = 1
+    if label_weights is None:
+        bin_label_weights = None
+    else:
+        bin_label_weights = label_weights.view(-1, 1).expand(
+            label_weights.size(0), label_channels)
+    return bin_labels, bin_label_weights
 
 
 @HEADS.register_module
@@ -32,7 +44,7 @@ class BBoxHead(nn.Module):
                      loss_weight=1.0),
                  loss_bbox=dict(
                      type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
-                 equalization_cfg=None):
+                 get_target_cfg=dict(concat=True)):
         super(BBoxHead, self).__init__()
         assert with_cls or with_reg
         self.with_avg_pool = with_avg_pool
@@ -47,21 +59,6 @@ class BBoxHead(nn.Module):
         self.reg_class_agnostic = reg_class_agnostic
         self.fp16_enabled = False
 
-        self.with_equalization = equalization_cfg is not None
-        if self.with_equalization:
-            # load category_info
-            sorted_category_ids = mmcv.load(
-                equalization_cfg['category_info_path'])
-            # process category threshold
-            eq_thresh = equalization_cfg['supervise_threshold']
-            if eq_thresh == 'r':
-                eq_thresh = 454
-            elif eq_thresh == 'c':
-                eq_thresh = 454 + 461
-            else:
-                assert isinstance(eq_thresh, int) and eq_thresh < 1231
-            self.supervise_cat_ids = sorted_category_ids[eq_thresh:]
-            assert loss_cls['use_sigmoid']
         self.loss_cls = build_loss(loss_cls)
         self.loss_bbox = build_loss(loss_bbox)
 
@@ -76,6 +73,8 @@ class BBoxHead(nn.Module):
             out_dim_reg = 4 if reg_class_agnostic else 4 * num_classes
             self.fc_reg = nn.Linear(in_channels, out_dim_reg)
         self.debug_imgs = None
+        self.concat_targets = get_target_cfg.get('concat', True)
+        self.propagate_labels = get_target_cfg.get('propagate_labels', False)
 
     def init_weights(self):
         if self.with_cls:
@@ -99,10 +98,7 @@ class BBoxHead(nn.Module):
                    gt_bboxes,
                    gt_labels,
                    rcnn_train_cfg,
-                   img_metas=None,
-                   num_classes=80 + 1):
-        if not self.with_equalization:
-            img_metas = [None for _ in range(len(img_metas))]
+                   img_metas=None):
         pos_proposals = [res.pos_bboxes for res in sampling_results]
         neg_proposals = [res.neg_bboxes for res in sampling_results]
         pos_gt_bboxes = [res.pos_gt_bboxes for res in sampling_results]
@@ -117,8 +113,29 @@ class BBoxHead(nn.Module):
             reg_classes,
             target_means=self.target_means,
             target_stds=self.target_stds,
-            img_metas=img_metas,
-            num_classes=num_classes)
+            concat=self.concat_targets)
+
+        if self.propagate_labels:
+            assert self.graph is not None
+            _labels, _label_weights, bbox_targets, bbox_weights = cls_reg_targets  # noqa
+            if self.concat_targets:
+                # multi-label softmax formulation
+                pos_inds = _labels > 0
+                neg_inds = _labels == 0
+                bin_labels, bin_label_weights = _expand_binary_labels(
+                    _labels, _label_weights, self.num_classes)
+                # (N, C)
+                label_weights = bin_labels.new_zeros(
+                    bin_labels.size(), dtype=torch.float)
+                label_weights[pos_inds, 1:] = torch.matmul(
+                    bin_labels[pos_inds, 1:].float(), self.graph)
+                label_weights[neg_inds, 0] = 1
+                labels = (label_weights.clone() > 0).long()
+                target_meta = {'labels': _labels}
+                return labels, label_weights, bbox_targets, bbox_weights, target_meta  # noqa
+            else:
+                # multi-label sigmoid formulation
+                pass
         return cls_reg_targets
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))
@@ -129,32 +146,34 @@ class BBoxHead(nn.Module):
              label_weights,
              bbox_targets,
              bbox_weights,
+             target_meta=None,
              reduction_override=None):
         # labels: first 512 -> batch 1, last 512 -> batch 2
         losses = dict()
-        avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
-        if self.with_equalization:
-            labels_cat = torch.nonzero(labels > 0)[:, 1]
+        if target_meta is not None:
+            # sparse label
+            categorical_labels = target_meta['labels']
+            avg_factor = max(label_weights.size(0), 1.)
         else:
-            labels_cat = labels
+            # categorical label
+            categorical_labels = labels
+            avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
         if cls_score is not None:
-            if self.with_equalization:
-                label_weights[:, self.supervise_cat_ids] = 1.0
-                avg_factor = label_weights.size(0)
             losses['loss_cls'] = self.loss_cls(
                 cls_score,
                 labels,
                 label_weights,
                 avg_factor=avg_factor,
                 reduction_override=reduction_override)
-            losses['acc'] = accuracy(cls_score, labels_cat)
+            losses['acc'] = accuracy(cls_score, categorical_labels)
         if bbox_pred is not None:
-            pos_inds = labels_cat > 0
+            pos_inds = categorical_labels > 0
             if self.reg_class_agnostic:
                 pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), 4)[pos_inds]
             else:
                 pos_bbox_pred = bbox_pred.view(
-                    bbox_pred.size(0), -1, 4)[pos_inds, labels_cat[pos_inds]]
+                    bbox_pred.size(0), -1,
+                    4)[pos_inds, categorical_labels[pos_inds]]
             losses['loss_bbox'] = self.loss_bbox(
                 pos_bbox_pred,
                 bbox_targets[pos_inds],
@@ -174,14 +193,7 @@ class BBoxHead(nn.Module):
                        cfg=None):
         if isinstance(cls_score, list):
             cls_score = sum(cls_score) / float(len(cls_score))
-        if self.with_equalization:
-            # scores = F.sigmoid(cls_score) if cls_score is not None else None
-            scores = F.softmax(
-                cls_score, dim=1) if cls_score is not None else None
-        else:
-            scores = F.softmax(
-                cls_score, dim=1) if cls_score is not None else None
-
+        scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
         if bbox_pred is not None:
             bboxes = delta2bbox(rois[:, 1:], bbox_pred, self.target_means,
                                 self.target_stds, img_shape)

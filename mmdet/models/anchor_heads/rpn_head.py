@@ -12,9 +12,8 @@ from .anchor_head import AnchorHead
 @HEADS.register_module
 class RPNHead(AnchorHead):
 
-    def __init__(self, in_channels, return_rpn_features=False, **kwargs):
+    def __init__(self, in_channels, **kwargs):
         super(RPNHead, self).__init__(2, in_channels, **kwargs)
-        self.return_rpn_features = return_rpn_features
 
     def _init_layers(self):
         self.rpn_conv = nn.Conv2d(
@@ -31,11 +30,7 @@ class RPNHead(AnchorHead):
     def forward_single(self, x):
         x = self.rpn_conv(x)
         x = F.relu(x, inplace=True)
-        rpn_cls_score = self.rpn_cls(x)
-        rpn_bbox_pred = self.rpn_reg(x)
-        if self.return_rpn_features:
-            return rpn_cls_score, rpn_bbox_pred, x
-        return rpn_cls_score, rpn_bbox_pred
+        return self.rpn_cls(x), self.rpn_reg(x)
 
     def loss(self,
              cls_scores,
