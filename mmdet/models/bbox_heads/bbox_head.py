@@ -76,6 +76,8 @@ class BBoxHead(nn.Module):
         self.concat_targets = get_target_cfg.get('concat', True)
         self.sparse_label = get_target_cfg.get('sparse_label', False)
         self.propagate_labels = get_target_cfg.get('propagate_labels', False)
+        self.label_weight_loss = get_target_cfg.get('label_weight_loss',
+                                                    'softmax')
 
     def init_weights(self):
         if self.with_cls:
@@ -135,6 +137,9 @@ class BBoxHead(nn.Module):
                     bin_labels[pos_inds, 1:].float(), self.graph)
                 label_weights[neg_inds, 0] = 1.0
                 labels = (label_weights.clone() > 0).long()
+                if self.label_weights_loss == 'sigmoid':
+                    label_weights = label_weights.new_ones(
+                        label_weights.size(), dtype=torch.float)
                 return labels, label_weights, bbox_targets, bbox_weights, target_meta  # noqa
         else:
             # list of tensor -> process independently (multi_apply)
