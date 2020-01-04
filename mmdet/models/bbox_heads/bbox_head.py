@@ -74,6 +74,7 @@ class BBoxHead(nn.Module):
             self.fc_reg = nn.Linear(in_channels, out_dim_reg)
         self.debug_imgs = None
         self.concat_targets = get_target_cfg.get('concat', True)
+        self.sparse_label = get_target_cfg.get('sparse_label', False)
         self.propagate_labels = get_target_cfg.get('propagate_labels', False)
 
     def init_weights(self):
@@ -115,27 +116,30 @@ class BBoxHead(nn.Module):
             target_stds=self.target_stds,
             concat=self.concat_targets)
 
-        if self.propagate_labels:
-            assert self.graph is not None
-            _labels, _label_weights, bbox_targets, bbox_weights = cls_reg_targets  # noqa
-            if self.concat_targets:
-                # multi-label softmax formulation
-                pos_inds = _labels > 0
-                neg_inds = _labels == 0
+        _labels, _label_weights, bbox_targets, bbox_weights = cls_reg_targets
+        if self.concat_targets:
+            if self.sparse_label:
+                target_meta = {'labels': _labels}
                 bin_labels, bin_label_weights = _expand_binary_labels(
                     _labels, _label_weights, self.num_classes)
-                # (N, C)
+                if not self.propagate_labels:
+                    return bin_labels, bin_label_weights, bbox_targets, bbox_weights, target_meta  # noqa
+                # propagate on graph
+                assert self.graph is not None
+                pos_inds = _labels > 0
+                neg_inds = _labels == 0
                 label_weights = bin_labels.new_zeros(
                     bin_labels.size(), dtype=torch.float)
+                # label weights for softmax loss formulation.
                 label_weights[pos_inds, 1:] = torch.matmul(
                     bin_labels[pos_inds, 1:].float(), self.graph)
-                label_weights[neg_inds, 0] = 1
+                label_weights[neg_inds, 0] = 1.0
                 labels = (label_weights.clone() > 0).long()
-                target_meta = {'labels': _labels}
                 return labels, label_weights, bbox_targets, bbox_weights, target_meta  # noqa
-            else:
-                # multi-label sigmoid formulation
-                pass
+        else:
+            # list of tensor -> process independently (multi_apply)
+            raise NotImplementedError
+        # categorical.
         return cls_reg_targets
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))
