@@ -73,11 +73,10 @@ class BBoxHead(nn.Module):
             out_dim_reg = 4 if reg_class_agnostic else 4 * num_classes
             self.fc_reg = nn.Linear(in_channels, out_dim_reg)
         self.debug_imgs = None
-        self.concat_targets = get_target_cfg.get('concat', True)
+        self.concat_targets = get_target_cfg.get('concat_targets', True)
         self.sparse_label = get_target_cfg.get('sparse_label', False)
         self.propagate_labels = get_target_cfg.get('propagate_labels', False)
-        self.label_weight_loss = get_target_cfg.get('label_weight_loss',
-                                                    'softmax')
+        self.use_sigmoid_cls = get_target_cfg.get('use_sigmoid_cls', False)
 
     def init_weights(self):
         if self.with_cls:
@@ -125,6 +124,7 @@ class BBoxHead(nn.Module):
                 bin_labels, bin_label_weights = _expand_binary_labels(
                     _labels, _label_weights, self.num_classes)
                 if not self.propagate_labels:
+                    # targets for sigmoid activation
                     return bin_labels, bin_label_weights, bbox_targets, bbox_weights, target_meta  # noqa
                 # propagate on graph
                 assert self.graph is not None
@@ -137,9 +137,10 @@ class BBoxHead(nn.Module):
                     bin_labels[pos_inds, 1:].float(), self.graph)
                 label_weights[neg_inds, 0] = 1.0
                 labels = (label_weights.clone() > 0).long()
-                if self.label_weight_loss == 'sigmoid':
+                if self.use_sigmoid_cls:
                     label_weights = label_weights.new_ones(
                         label_weights.size(), dtype=torch.float)
+                    # label weights: further processing
                 return labels, label_weights, bbox_targets, bbox_weights, target_meta  # noqa
         else:
             # list of tensor -> process independently (multi_apply)

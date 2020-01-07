@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 from ..registry import HEADS
-from ..utils import ConvModule
+from ..utils import ConvModule, bias_init_with_prob
 from .bbox_head import BBoxHead
 
 
@@ -128,6 +128,10 @@ class ConvFCBBoxHead(BBoxHead):
                 if isinstance(m, nn.Linear):
                     nn.init.xavier_uniform_(m.weight)
                     nn.init.constant_(m.bias, 0)
+        if self.use_sigmoid_cls and self.with_cls:
+            bias_cls = bias_init_with_prob(1. / self.num_classes)
+            # optimal initial bias w.r.t mimimum BCE loss
+            nn.init.constant_(self.fc_cls.bias, bias_cls)
 
     def forward(self, x):
         # shared part
