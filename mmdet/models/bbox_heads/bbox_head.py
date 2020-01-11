@@ -1,10 +1,11 @@
+import mmcv
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.utils import _pair
 
 from mmdet.core import (auto_fp16, bbox_target, delta2bbox, force_fp32,
-                        multiclass_nms)
+                        multiclass_nms, process_class_label)
 from ..builder import build_loss
 from ..losses import accuracy
 from ..registry import HEADS
@@ -73,10 +74,27 @@ class BBoxHead(nn.Module):
             out_dim_reg = 4 if reg_class_agnostic else 4 * num_classes
             self.fc_reg = nn.Linear(in_channels, out_dim_reg)
         self.debug_imgs = None
+
+        # target configs
         self.concat_targets = get_target_cfg.get('concat_targets', True)
         self.sparse_label = get_target_cfg.get('sparse_label', False)
         self.propagate_labels = get_target_cfg.get('propagate_labels', False)
         self.use_sigmoid_cls = get_target_cfg.get('use_sigmoid_cls', False)
+        self.eql_cfg = get_target_cfg.get('eql_cfg', None)
+        self.with_eql_loss = self.eql_cfg is not None
+        if self.with_eql_loss:
+            assert self.use_sigmoid_cls
+            # load category_info
+            sorted_category_ids = mmcv.load(self.eql_cfg['category_info_path'])
+            # process category threshold
+            eq_thresh = self.eql_cfg['supervise_threshold']
+            if eq_thresh == 'r':
+                eq_thresh = 454
+            elif eq_thresh == 'c':
+                eq_thresh = 454 + 461
+            else:
+                assert isinstance(eq_thresh, int) and eq_thresh < 1231
+            self.eql_cfg['supervise_cat_ids'] = sorted_category_ids[eq_thresh:]
 
     def init_weights(self):
         if self.with_cls:
@@ -106,7 +124,7 @@ class BBoxHead(nn.Module):
         pos_gt_bboxes = [res.pos_gt_bboxes for res in sampling_results]
         pos_gt_labels = [res.pos_gt_labels for res in sampling_results]
         reg_classes = 1 if self.reg_class_agnostic else self.num_classes
-        cls_reg_targets = bbox_target(
+        labels, label_weights, bbox_targets, bbox_weights = bbox_target(
             pos_proposals,
             neg_proposals,
             pos_gt_bboxes,
@@ -117,36 +135,46 @@ class BBoxHead(nn.Module):
             target_stds=self.target_stds,
             concat=self.concat_targets)
 
-        _labels, _label_weights, bbox_targets, bbox_weights = cls_reg_targets
-        if self.concat_targets:
-            if self.sparse_label:
-                target_meta = {'labels': _labels}
-                bin_labels, bin_label_weights = _expand_binary_labels(
-                    _labels, _label_weights, self.num_classes)
-                if not self.propagate_labels:
-                    # targets for sigmoid activation
-                    return bin_labels, bin_label_weights, bbox_targets, bbox_weights, target_meta  # noqa
-                # propagate on graph
-                assert self.graph is not None
-                pos_inds = _labels > 0
-                neg_inds = _labels == 0
-                label_weights = bin_labels.new_zeros(
-                    bin_labels.size(), dtype=torch.float)
-                # label weights for softmax loss formulation.
-                label_weights[pos_inds, 1:] = torch.matmul(
-                    bin_labels[pos_inds, 1:].float(), self.graph)
-                label_weights[neg_inds, 0] = 1.0
-                labels = (label_weights.clone() > 0).long()
-                if self.use_sigmoid_cls:
-                    label_weights = label_weights.new_ones(
-                        label_weights.size(), dtype=torch.float)
-                    # label weights: further processing
-                return labels, label_weights, bbox_targets, bbox_weights, target_meta  # noqa
-        else:
-            # list of tensor -> process independently (multi_apply)
-            raise NotImplementedError
+        labels, label_weights, target_meta = process_class_label(
+            labels,
+            label_weights,
+            img_metas,
+            concat_targets=self.concat_targets,
+            sparse_label=self.sparse_label,
+            graph=self.graph,
+            use_sigmoid_cls=self.use_sigmoid_cls,
+            eql_cfg=self.eql_cfg,
+            num_classes=self.num_classes)
+        if not self.concat_targets:
+            bbox_targets = torch.cat(bbox_targets)
+            bbox_weights = torch.cat(bbox_weights)
+        '''
+        if self.sparse_label:
+            target_meta = {'labels': _labels}
+            bin_labels, bin_label_weights = _expand_binary_labels(
+                _labels, _label_weights, self.num_classes)
+            if not self.propagate_labels:
+                # targets for sigmoid activation
+                return bin_labels, bin_label_weights, bbox_targets, bbox_weights, target_meta  # noqa
+            # propagate on graph
+            assert self.graph is not None
+            pos_inds = _labels > 0
+            neg_inds = _labels == 0
+            label_weights = bin_labels.new_zeros(
+                bin_labels.size(), dtype=torch.float)
+            # label weights for softmax loss formulation.
+            label_weights[pos_inds, 1:] = torch.matmul(
+                bin_labels[pos_inds, 1:].float(), self.graph)
+            label_weights[neg_inds, 0] = 1.0
+            labels = (label_weights.clone() > 0).long()
+            if self.use_sigmoid_cls:
+                label_weights = label_weights.new_ones(
+                    label_weights.size(), dtype=torch.float)
+                # label weights: further processing
+            return labels, label_weights, bbox_targets, bbox_weights, target_meta  # noqa
         # categorical.
-        return cls_reg_targets
+        '''
+        return labels, label_weights, bbox_targets, bbox_weights, target_meta
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))
     def loss(self,

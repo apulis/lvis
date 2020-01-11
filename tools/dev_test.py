@@ -31,9 +31,10 @@ def parse_losses(losses):
 
 def main():
     # cfg_file = 'configs/lvis/eql_loss/mask-rcnn-r50_PRS-1e-2_eql-loss.py'
-    # cfg_file = 'configs/lvis/eccv/mask_rcnn_r50_fpn_1x_RS-1e-3_eql-loss.py'
+    cfg_file = 'configs/lvis/eccv/mask_rcnn_r50_fpn_1x_RS-1e-3_eql-loss.py'
     # cfg_file = 'configs/lvis/eccv/co_occurrence_prior.py'
-    cfg_file = 'configs/lvis/eccv/mask_rcnn_r50_fpn_1x_RS-1e-3_sigmoid.py'
+    # cfg_file = 'configs/lvis/eccv/mask_rcnn_r50_fpn_1x_RS-1e-3_focal.py'
+    # cfg_file = 'configs/retinanet_r50_fpn_1x.py'
     cfg = Config.fromfile(cfg_file)
     cfg.gpus = 1
 
