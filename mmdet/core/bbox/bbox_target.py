@@ -152,6 +152,7 @@ def process_class_label(labels,
     label_weights[neg_inds, 0] = 1.0
     labels = (label_weights.clone() > 0).long()
     if use_sigmoid_cls:
-        label_weights = label_weights.new_ones(
-            label_weights.size(), dtype=torch.float)
+        label_weights[label_weights == 0] = 1.0
+        # label_weights = label_weights.new_ones(
+        #     label_weights.size(), dtype=torch.float)
     return labels, label_weights, target_meta
