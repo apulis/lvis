@@ -30,7 +30,9 @@ class LVISMaskRCNN(BaseDetector, RPNTestMixin, BBoxTestMixin, MaskTestMixin):
         self.with_graph = graph_cfg is not None
         if self.with_graph:
             self.graph = mmcv.load(graph_cfg['path'])
+            noise_thr = graph_cfg.get('noise_thr', 0)
             self.graph = np.float32(self.graph)
+            self.graph[self.graph <= noise_thr] = 0.0
             self.graph = nn.Parameter(
                 torch.from_numpy(self.graph), requires_grad=False)
         self.backbone = builder.build_backbone(backbone)
