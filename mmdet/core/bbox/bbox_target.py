@@ -155,4 +155,4 @@ def process_class_label(labels,
         label_weights[label_weights == 0] = 1.0
         # label_weights = label_weights.new_ones(
         #     label_weights.size(), dtype=torch.float)
-    return labels, label_weights, target_meta
+    return bin_labels, label_weights, target_meta
